@@ -116,12 +116,12 @@ def execute_bash(command: str) -> str:
 
     try:
         result = subprocess.run(
-            command,              # 要执行的命令字符串
-            shell=True,           # 通过 shell 执行，支持管道、重定向等语法
-            cwd=os.getcwd(),      # 工作目录设为当前目录（与 Agent 运行目录一致）
+            command,  # 要执行的命令字符串
+            shell=True,  # 通过 shell 执行，支持管道、重定向等语法
+            cwd=os.getcwd(),  # 工作目录设为当前目录（与 Agent 运行目录一致）
             capture_output=True,  # 捕获 stdout 和 stderr，而非直接打印到终端
-            text=True,            # 以字符串（而非 bytes）返回输出，自动解码
-            timeout=120,          # 超时 120 秒，防止命令挂起导致 Agent 卡死
+            text=True,  # 以字符串（而非 bytes）返回输出，自动解码
+            timeout=120,  # 超时 120 秒，防止命令挂起导致 Agent 卡死
         )
         output = result.stdout
         if result.stderr:
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         try:
             # 用户输入
             user_input = input("\033[36ms01 >> \033[0m").strip()
-            if user_input.lower() in ("q" "exit", "quit", ""): break
+            if user_input.lower() in ("q", "exit", "quit", ""): break
             # 输入追加到消息历史
             messages.append({"role": "user", "content": user_input})
         except (EOFError, KeyboardInterrupt):

@@ -43,10 +43,11 @@ else
     echo ">>> mitmweb 已在端口 ${MITM_PORT} 运行"
 fi
 
-MITM_WEB_URL=$(sed -n -E "/Web server listening.*\?token=/p" /tmp/mitmweb.log | tail -n1)
-
 echo ">>> 运行: python ${SCRIPT} $*"
-echo ">>> ${MITM_WEB_URL}"
+if [ -f /tmp/mitmweb.log ]; then
+  MITM_WEB_URL=$(sed -n -E "/Web server listening.*\?token=/p" /tmp/mitmweb.log | tail -n1)
+  echo ">>> ${MITM_WEB_URL}"
+fi
 echo ""
 
 HTTPS_PROXY="http://127.0.0.1:${MITM_PORT}" \
