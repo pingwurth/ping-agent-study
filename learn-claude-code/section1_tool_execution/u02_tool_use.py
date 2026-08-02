@@ -33,6 +33,7 @@ from common import create_client
 # ── readline 中文修复 ──────────────────────────────────────
 try:
     import readline
+
     readline.parse_and_bind('set bind-tty-special-chars off')
     readline.parse_and_bind('set input-meta on')
     readline.parse_and_bind('set output-meta on')
@@ -48,7 +49,7 @@ client, MODEL = create_client()
 SYSTEM = f"You are a coding agent at {os.getcwd()}. Use tools to solve tasks. Act, don't explain."
 
 # ============================================================
-# 工具定义：三个工具，各自有不同的用途
+# 工具定义：四个工具，各自有不同的用途
 # ============================================================
 # 每个工具的 description 至关重要 —— 模型根据描述判断何时使用哪个工具
 # 好的描述 = 模型能正确选择工具
@@ -102,8 +103,31 @@ WRITE_FILE_TOOL = {
     },
 }
 
+EDIT_FILE_TOOL = {
+    "name": "edit_file",
+    "description": "仅替换文件中的精确文本一次。",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "要写入的文件路径",
+            },
+            "old_text": {
+                "type": "string",
+                "description": "要替换的文本",
+            },
+            "new_text": {
+                "type": "string",
+                "description": "要替换的新文本",
+            },
+        },
+        "required": ["path", "old_text", "new_text"],
+    },
+}
+
 # 所有工具列表 —— 传给模型让它知道有哪些工具可用
-ALL_TOOLS = [BASH_TOOL, READ_FILE_TOOL, WRITE_FILE_TOOL]
+ALL_TOOLS = [BASH_TOOL, READ_FILE_TOOL, WRITE_FILE_TOOL, EDIT_FILE_TOOL]
 
 
 # ============================================================
@@ -167,23 +191,29 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
         return execute_read_file(tool_input["path"])
     elif tool_name == "write_file":
         return execute_write_file(tool_input["path"], tool_input["content"])
+    elif tool_name == "edit_file":
+        return execute_write_file(tool_input["path"],
+                                  tool_input["old_text"].replace(tool_input["old_text"], tool_input["new_text"]))
     else:
         return f"[ERROR] 未知工具: {tool_name}"
+
+
+def print_response_content(content):
+    """
+    打印模型回复的内容块。
+
+    Anthropic API 返回的 content 是一个列表，每个元素是一个 content block：
+      - type="text"：普通文本，模型的自然语言回复
+    """
+    if isinstance(content, list):
+        for block in content:
+            if block.type == "text":
+                print(f"\n{block.text}")
 
 
 # ============================================================
 # Agent 循环（多工具版本）
 # ============================================================
-
-def print_response_content(response):
-    """打印模型回复的内容块。"""
-    for block in response.content:
-        if block.type == "text":
-            print(f"\n[模型回复] {block.text}")
-        elif block.type == "tool_use":
-            print(f"\n[工具调用] {block.name}({json.dumps(block.input, ensure_ascii=False)})")
-
-
 def agent_loop(messages: list) -> None:
     """
     带多工具支持的 Agent 循环。
@@ -203,14 +233,11 @@ def agent_loop(messages: list) -> None:
     while True:
         # 将所有工具定义传给模型
         response = client.messages.create(
-            model=MODEL,
-            max_tokens=8096,
-            system=SYSTEM,
-            tools=ALL_TOOLS,  # 传入三个工具
+            model=MODEL, max_tokens=8096, system=SYSTEM,
+            tools=ALL_TOOLS,
             messages=messages,
         )
 
-        print_response_content(response)
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "end_turn":
@@ -235,31 +262,39 @@ def agent_loop(messages: list) -> None:
 
 
 # ============================================================
-# 程序入口：交互式 REPL
+# 程序入口
 # ============================================================
 if __name__ == "__main__":
-    print(f"[多工具 Agent] 模型: {MODEL}")
-    print(f"[系统提示] {SYSTEM}")
-    print(f"[工具] {', '.join(t['name'] for t in ALL_TOOLS)}")
-    print("-" * 50)
+    """
+    条件判断：if __name__ == "__main__": 检查当前模块是否作为主程序运行
+    程序入口：只有当文件直接执行时，条件才为真，代码块内的内容才会执行
+    模块导入保护：当文件被其他模块导入时，条件为假，代码块内的内容不会执行
 
+    __name__ 是Python的一个内置变量：
+    当文件直接运行时，__name__ 的值为 "__main__"
+    当文件被导入时，__name__ 的值为模块名（如 "u01_agent_loop"）
+    """
+
+    print("输入问题，回车发送。输入 q 退出。")
+
+    # 消息历史贯穿整个会话，模型能看到之前所有对话
     messages = []
 
     while True:
         try:
-            user_input = input("\033[36mu02 >> \033[0m").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ("exit", "quit"):
-                print("再见！")
-                break
-
+            # 用户输入
+            user_input = input("\033[36ms01 >> \033[0m").strip()
+            if user_input.lower() in ("q", "exit", "quit", ""): break
+            # 输入追加到消息历史
             messages.append({"role": "user", "content": user_input})
-            agent_loop(messages)
+        except (EOFError, KeyboardInterrupt):
+            break  # Ctrl+D 退出, Ctrl+C 退出
 
-        except KeyboardInterrupt:
-            print("\n\n中断退出。")
-            break
-        except EOFError:
-            print("\n\n再见！")
-            break
+        # Agent Loop = 智能体的 “思考 — 行动 — 观察” 循环
+        # 是大模型 Agent（智能体）最核心的工作机制
+        # 让 AI 能像人一样自主解决复杂任务，而不是只做一次性问答
+        agent_loop(messages)
+
+        print()
+        print("-" * 100)
+        print_response_content(messages[-1]['content'])
