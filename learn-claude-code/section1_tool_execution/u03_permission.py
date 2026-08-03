@@ -17,12 +17,27 @@ Claude Code 中的权限实现：
 
 权限检查流程：
   模型请求工具调用 → 检查是否危险 → 危险则询问用户 → 允许则执行，拒绝则跳过
+
+Three gates inserted before tool execution:
+
+    Gate 1: Hard deny list (rm -rf /, sudo, ...)
+    Gate 2: Rule matching (write outside workspace? destructive cmd?)
+    Gate 3: User approval (pause and wait for confirmation)
+
+    +-------+    +--------+    +--------+    +--------+    +------+
+    | Tool  | -> | Gate 1 | -> | Gate 2 | -> | Gate 3 | -> | Exec |
+    | call  |    | deny?  |    | match? |    | allow? |    |      |
+    +-------+    +--------+    +--------+    +--------+    +------+
+         |            |             |             |
+         v            v             v             v
+      (normal)     (blocked)    (ask user)   (user says no?)
 """
 
 import os
 import sys
 import json
 import subprocess
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from common import create_client
@@ -30,6 +45,7 @@ from common import create_client
 # ── readline 中文修复 ──────────────────────────────────────
 try:
     import readline
+
     readline.parse_and_bind('set bind-tty-special-chars off')
     readline.parse_and_bind('set input-meta on')
     readline.parse_and_bind('set output-meta on')
@@ -37,152 +53,234 @@ try:
 except ImportError:
     pass
 
-# ============================================================
+# ═══════════════════════════════════════════════════════════
 # 初始化客户端
-# ============================================================
+# ═══════════════════════════════════════════════════════════
 client, MODEL = create_client()
+WORKDIR = Path.cwd()
+SYSTEM = f"You are a coding agent at {WORKDIR}. All destructive operations require user approval."
 
-SYSTEM = f"You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain."
+# ═══════════════════════════════════════════════════════════
+#  Three-Gate Permission Pipeline
+# ═══════════════════════════════════════════════════════════
 
-# ============================================================
-# 危险命令检测
-# ============================================================
-# Claude Code 有更完善的权限模型（基于工具类型 + 路径规则），
-# 这里简化为命令模式匹配。
+# Gate 1: Hard deny list — always forbidden
+DENY_LIST = ["rm -rf /", "sudo", "shutdown", "reboot", "mkfs", "dd if=", "> /dev/sda"]
 
-DANGEROUS_PATTERNS = [
-    "rm -rf",        # 递归强制删除
-    "rm -f /",       # 删除根目录文件
-    "sudo rm",       # sudo 删除
-    "mkfs",          # 格式化文件系统
-    "dd if=",        # 直接磁盘写入
-    "> /dev/sd",     # 覆写磁盘设备
-    "chmod 777",     # 开放所有权限
-    "curl | bash",   # 远程代码执行
-    "wget | bash",   # 远程代码执行
-    ":(){:|:&};:",   # fork bomb
+
+def check_deny_list(command: str) -> str | None:
+    for pattern in DENY_LIST:
+        if pattern in command:
+            return f"Blocked: '{pattern}' is on the deny list"
+    return None
+
+
+# Gate 2: Rule matching — context-dependent checks
+PERMISSION_RULES = [
+    {"tools": ["read_file", "write_file", "edit_file"],
+     "check": lambda args: not (WORKDIR / args.get("path", "")).resolve().is_relative_to(WORKDIR),
+     "message": "Writing outside workspace"},
+    {"tools": ["bash"],
+     "check": lambda args: any(kw in args.get("command", "") for kw in ["rm ", "> /etc/", "chmod 777"]),
+     "message": "Potentially destructive command"},
 ]
 
 
-def is_dangerous(command: str) -> bool:
-    """
-    检查命令是否为危险命令。
-
-    实际的 Claude Code 使用更精细的规则：
-      - 按工具类型（Read/Write/Bash/Edit）分类
-      - 按路径模式匹配（如 /etc/*、~/.ssh/*）
-      - 支持用户自定义规则
-    """
-    cmd_lower = command.lower().strip()
-    return any(pattern in cmd_lower for pattern in DANGEROUS_PATTERNS)
+def check_rules(tool_name: str, args: dict) -> str | None:
+    for rule in PERMISSION_RULES:
+        if tool_name in rule["tools"] and rule["check"](args):
+            return rule["message"]
+    return None
 
 
-def request_permission(command: str) -> bool:
-    """
-    请求用户确认是否允许执行命令。
+# Gate 3: User approval — wait for confirmation after rule match
+def ask_user(tool_name: str, args: dict, reason: str) -> str:
+    print(f"\n\033[33m⚠  {reason}\033[0m")
+    print(f"   Tool: {tool_name}({args})")
+    choice = input("   Allow? [y/N] ").strip().lower()
+    return "allow" if choice in ("y", "yes") else "deny"
 
-    Claude Code 中的权限 UI 更丰富：
-      - 显示完整的命令和上下文
-      - 提供 "always allow" 选项（本会话内生效）
-      - 记录用户的权限决策历史
-    """
-    print(f"\n\033[33m[权限检查] 检测到可能的危险命令\033[0m")
-    print(f"\033[33m  命令: {command}\033[0m")
 
-    while True:
-        response = input(
-            "\033[33m  允许执行？[y/n/a] (y=允许, n=拒绝, a=本会话自动允许): \033[0m"
-        ).strip().lower()
-
-        if response in ("y", "yes"):
-            return True
-        elif response in ("n", "no"):
+# Pipeline: all three gates chained
+def check_permission(block) -> bool:
+    if block.name == "bash":
+        reason = check_deny_list(block.input.get("command", ""))
+        if reason:
+            print(f"\n\033[31m⛔ {reason}\033[0m")
             return False
-        elif response == "a":
-            # 设置自动允许标志，后续同类命令不再询问
-            print("\033[33m  已设置本会话自动允许\033[0m")
-            return "auto_approve"
-        print("  请输入 y/n/a")
+    reason = check_rules(block.name, block.input)
+    if reason:
+        decision = ask_user(block.name, block.input, reason)
+        if decision == "deny":
+            return False
+    return True
 
 
-def execute_with_permission(command: str, auto_approve: bool = False) -> str:
-    """
-    带权限检查的命令执行。
+# ═══════════════════════════════════════════════════════════
+#  Tool Implementations
+# ═══════════════════════════════════════════════════════════
 
-    流程：
-      1. 检查是否自动允许模式
-      2. 如果不是自动允许，检查命令是否危险
-      3. 危险命令需要用户确认
-      4. 确认通过后执行命令
-    """
-    # 自动允许模式：跳过所有检查
-    if auto_approve:
-        return execute_bash(command)
-
-    # 检查是否危险
-    if is_dangerous(command):
-        result = request_permission(command)
-        if result == "auto_approve":
-            # 用户选择自动允许，设置标志
-            return "__SET_AUTO_APPROVE__"
-        elif not result:
-            return "[DENIED] 用户拒绝执行该命令"
-
-    return execute_bash(command)
-
-
-def execute_bash(command: str) -> str:
-    """执行 bash 命令。"""
+def run_bash(command: str) -> str:
     try:
-        result = subprocess.run(
-            command, shell=True,
-            capture_output=True, text=True, timeout=120,
-        )
-        output = result.stdout
-        if result.stderr:
-            output += f"\n[stderr]\n{result.stderr}"
-        if result.returncode != 0:
-            output += f"\n[exit code: {result.returncode}]"
-        return output.strip() or "(命令执行成功，无输出)"
+        r = subprocess.run(command, shell=True, cwd=WORKDIR,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr).strip()
+        return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
-        return "[TIMEOUT] 命令执行超过 120 秒超时"
+        return "Error: Timeout (120s)"
+
+
+def run_read(path: str, limit: int | None = None) -> str:
+    try:
+        lines = (WORKDIR / path).resolve().read_text().splitlines()
+        if limit and limit < len(lines):
+            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
+        return "\n".join(lines)
     except Exception as e:
-        return f"[ERROR] 执行失败: {e}"
+        return f"Error: {e}"
 
 
-# ============================================================
-# 工具定义
-# ============================================================
-BASH_TOOL = {
-    "name": "bash",
-    "description": "在终端中执行 bash 命令并返回输出结果。",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "要执行的 bash 命令",
-            }
-        },
-        "required": ["command"],
+def run_write(path: str, content: str) -> str:
+    try:
+        file_path = (WORKDIR / path).resolve()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content)
+        return f"Wrote {len(content)} bytes to {path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_edit(path: str, old_text: str, new_text: str) -> str:
+    try:
+        file_path = (WORKDIR / path).resolve()
+        text = file_path.read_text()
+        if old_text not in text:
+            return f"Error: text not found in {path}"
+        file_path.write_text(text.replace(old_text, new_text, 1))
+        return f"Edited {path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_glob(pattern: str) -> str:
+    import glob as g
+    try:
+        results = []
+        for match in g.glob(pattern, root_dir=WORKDIR):
+            if (WORKDIR / match).resolve().is_relative_to(WORKDIR):
+                results.append(match)
+        return "\n".join(results) if results else "(no matches)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ═══════════════════════════════════════════════════════════
+#   Tool Definitions & Dispatch
+# ═══════════════════════════════════════════════════════════
+
+TOOLS = [
+    {
+        "name": "bash",
+        "description": "Run a shell command.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "command"
+            ]
+        }
     },
+    {
+        "name": "read_file",
+        "description": "Read file contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "path"
+            ]
+        }
+    },
+    {
+        "name": "write_file",
+        "description": "Write content to a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "content"
+            ]
+        }
+    },
+    {
+        "name": "edit_file",
+        "description": "Replace exact text in a file once.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "old_text": {
+                    "type": "string"
+                },
+                "new_text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "old_text",
+                "new_text"
+            ]
+        }
+    },
+    {
+        "name": "glob",
+        "description": "Find files matching a glob pattern.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "pattern"
+            ]
+        }
+    }
+]
+
+TOOL_HANDLERS = {
+    "bash": run_bash, "read_file": run_read, "write_file": run_write,
+    "edit_file": run_edit, "glob": run_glob,
 }
 
 
-# ============================================================
-# Agent 循环（带权限控制）
-# ============================================================
-
-def print_response_content(response):
-    """打印模型回复的内容块。"""
-    for block in response.content:
-        if block.type == "text":
-            print(f"\n[模型回复] {block.text}")
-        elif block.type == "tool_use":
-            print(f"\n[工具调用] {block.name}({json.dumps(block.input, ensure_ascii=False)})")
-
-
-def agent_loop(messages: list, auto_approve: bool = False) -> None:
+# ═══════════════════════════════════════════════════════════
+#  agent_loop — with check_permission() inserted
+# ═══════════════════════════════════════════════════════════
+def agent_loop(messages: list, is_auto_approve: bool = False) -> bool:
     """
     带权限控制的 Agent 循环。
 
@@ -198,14 +296,10 @@ def agent_loop(messages: list, auto_approve: bool = False) -> None:
     """
     while True:
         response = client.messages.create(
-            model=MODEL,
-            max_tokens=8096,
-            system=SYSTEM,
-            tools=[BASH_TOOL],
+            model=MODEL, max_tokens=8096, system=SYSTEM,
+            tools=TOOLS,
             messages=messages,
         )
-
-        print_response_content(response)
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "end_turn":
@@ -213,66 +307,64 @@ def agent_loop(messages: list, auto_approve: bool = False) -> None:
 
         tool_results = []
         for block in response.content:
-            if block.type == "tool_use":
-                print(f"\n[执行工具] {block.name}...")
+            if block.type != "tool_use":
+                continue
 
-                if block.name == "bash":
-                    # 使用带权限检查的执行器
-                    output = execute_with_permission(
-                        block.input["command"],
-                        auto_approve=auto_approve,
-                    )
-
-                    # 处理自动允许标志
-                    if output == "__SET_AUTO_APPROVE__":
-                        auto_approve = True
-                        # 用户选择自动允许后，重新执行命令
-                        output = execute_bash(block.input["command"])
-                else:
-                    output = f"[ERROR] 未知工具: {block.name}"
-
-                print(f"[工具输出]\n{output}")
-
+            # 在执行前运行权限管道
+            if not check_permission(block):
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": output,
+                    "content": "Permission denied."
                 })
+                continue
+
+            handler = TOOL_HANDLERS.get(block.name)
+            output = handler(**block.input) if handler else f"Unknown: {block.name}"
+
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": output,
+            })
 
         messages.append({"role": "user", "content": tool_results})
 
-    return auto_approve
+    return is_auto_approve
+
+
+def print_response_content(content):
+    """
+    打印模型回复的内容块。
+
+    Anthropic API 返回的 content 是一个列表，每个元素是一个 content block：
+      - type="text"：普通文本，模型的自然语言回复
+    """
+    if isinstance(content, list):
+        for block in content:
+            if block.type == "text":
+                print(f"\n{block.text}")
 
 
 # ============================================================
 # 程序入口：交互式 REPL
 # ============================================================
 if __name__ == "__main__":
-    print(f"[权限控制 Agent] 模型: {MODEL}")
-    print(f"[系统提示] {SYSTEM}")
-    print("[工具] bash（带权限检查）")
-    print("[提示] 输入危险命令（如 'rm -rf /'）会触发权限检查")
-    print("-" * 50)
+    print("输入问题，回车发送。输入 q 退出。")
 
-    messages = []
+    message_list = []
     auto_approve = False
-
     while True:
         try:
-            user_input = input("\033[36mu03 >> \033[0m").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ("exit", "quit"):
-                print("再见！")
-                break
+            # 用户输入
+            user_input = input("\033[36ms01 >> \033[0m").strip()
+            if user_input.lower() in ("q", "exit", "quit", ""): break
+            # 输入追加到消息历史
+            message_list.append({"role": "user", "content": user_input})
+        except (EOFError, KeyboardInterrupt):
+            break  # Ctrl+D 退出, Ctrl+C 退出
 
-            messages.append({"role": "user", "content": user_input})
-            # agent_loop 返回更新后的 auto_approve 状态
-            auto_approve = agent_loop(messages, auto_approve=auto_approve)
-
-        except KeyboardInterrupt:
-            print("\n\n中断退出。")
-            break
-        except EOFError:
-            print("\n\n再见！")
-            break
+        auto_approve = agent_loop(message_list, is_auto_approve=auto_approve)
+        print()
+        print("-" * 100)
+        print_response_content(message_list[-1]['content'])
