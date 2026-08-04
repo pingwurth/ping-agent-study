@@ -229,7 +229,7 @@ if __name__ == "__main__":
     print("输入问题，回车发送。输入 q 退出。")
 
     # 消息历史贯穿整个会话，模型能看到之前所有对话
-    messages = []
+    history = []
 
     while True:
         try:
@@ -237,15 +237,15 @@ if __name__ == "__main__":
             user_input = input("\033[36ms01 >> \033[0m").strip()
             if user_input.lower() in ("q", "exit", "quit", ""): break
             # 输入追加到消息历史
-            messages.append({"role": "user", "content": user_input})
+            history.append({"role": "user", "content": user_input})
         except (EOFError, KeyboardInterrupt):
             break  # Ctrl+D 退出, Ctrl+C 退出
 
         # Agent Loop = 智能体的 “思考 — 行动 — 观察” 循环
         # 是大模型 Agent（智能体）最核心的工作机制
         # 让 AI 能像人一样自主解决复杂任务，而不是只做一次性问答
-        agent_loop(messages)
+        agent_loop(history)
 
         print()
         print("-" * 100)
-        print_response_content(messages[-1]['content'])
+        print_response_content(history[-1]['content'])

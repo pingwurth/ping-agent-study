@@ -35,7 +35,6 @@ Three gates inserted before tool execution:
 
 import os
 import sys
-import json
 import subprocess
 from pathlib import Path
 
@@ -352,7 +351,7 @@ def print_response_content(content):
 if __name__ == "__main__":
     print("输入问题，回车发送。输入 q 退出。")
 
-    message_list = []
+    history = []
     auto_approve = False
     while True:
         try:
@@ -360,11 +359,11 @@ if __name__ == "__main__":
             user_input = input("\033[36ms01 >> \033[0m").strip()
             if user_input.lower() in ("q", "exit", "quit", ""): break
             # 输入追加到消息历史
-            message_list.append({"role": "user", "content": user_input})
+            history.append({"role": "user", "content": user_input})
         except (EOFError, KeyboardInterrupt):
             break  # Ctrl+D 退出, Ctrl+C 退出
 
-        auto_approve = agent_loop(message_list, is_auto_approve=auto_approve)
+        auto_approve = agent_loop(history, is_auto_approve=auto_approve)
         print()
         print("-" * 100)
-        print_response_content(message_list[-1]['content'])
+        print_response_content(history[-1]['content'])
