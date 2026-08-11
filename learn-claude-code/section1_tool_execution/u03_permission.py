@@ -283,15 +283,23 @@ def agent_loop(messages: list, is_auto_approve: bool = False) -> bool:
     """
     带权限控制的 Agent 循环。
 
-    与 u01 的区别：
-      - u01 直接执行所有工具调用
-      - 这里在执行前进行权限检查
-      - 危险命令会询问用户确认
-      - 用户可以选择自动允许（auto_approve）
+    这里在每次工具执行前插入三道权限关卡（Three-Gate Pipeline）：
 
-    auto_approve 参数：
-      - False: 每次危险命令都询问（默认）
-      - True: 跳过所有权限检查（用户之前选择了 'a'）
+      Gate 1 — 硬拒绝列表（check_deny_list）
+        命中 DENY_LIST 的命令（如 rm -rf /、sudo）直接拦截，无需用户确认。
+      Gate 2 — 规则匹配（check_rules）
+        根据工具名和参数判断是否危险（如写入工作区外、destructive 命令）。
+      Gate 3 — 用户审批（ask_user）
+        规则命中后暂停执行，向用户询问 [y/N]，由用户决定是否放行。
+
+    任一关卡拒绝 → 工具不执行，向模型返回 "Permission denied"。
+
+    Args:
+        messages: 对话消息列表（会被原地追加 assistant/tool_result 消息）
+        is_auto_approve: 是否自动允许所有工具调用（默认 False）
+
+    Returns:
+        is_auto_approve 的当前值，供调用方决定后续交互是否继续跳过确认
     """
     while True:
         response = client.messages.create(

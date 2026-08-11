@@ -325,17 +325,27 @@ register_hook("Stop", summary_hook)
 # ═══════════════════════════════════════════════════════════
 def agent_loop(messages: list, is_auto_approve: bool = False) -> bool:
     """
-    带权限控制的 Agent 循环。
+    带 Hook 系统的 Agent 循环。
 
-    与 u01 的区别：
-      - u01 直接执行所有工具调用
-      - 这里在执行前进行权限检查
-      - 危险命令会询问用户确认
-      - 用户可以选择自动允许（auto_approve）
+    与 u03 的核心区别：u03 将权限检查硬编码在 agent_loop 内部，
+    这里通过 Hook 注册表（register_hook / trigger_hooks）实现可插拔的扩展点：
 
-    auto_approve 参数：
-      - False: 每次危险命令都询问（默认）
-      - True: 跳过所有权限检查（用户之前选择了 'a'）
+      事件            触发时机              已注册的 Hook
+      ──────────────  ────────────────────  ─────────────────────
+      PreToolUse      工具执行前            permission_hook（权限检查）
+                                          log_hook（日志记录）
+      PostToolUse     工具执行后            large_output_hook（大输出警告）
+      Stop            模型结束 turn 时      summary_hook（会话统计）
+
+    PreToolUse Hook 返回字符串 → 拦截工具调用，向模型返回该字符串。
+    Stop Hook 返回字符串 → 强制模型继续对话（追加为 user 消息）。
+
+    Args:
+        messages: 对话消息列表（会被原地追加 assistant/tool_result 消息）
+        is_auto_approve: 是否自动允许所有工具调用（默认 False）
+
+    Returns:
+        is_auto_approve 的当前值，供调用方决定后续交互是否继续跳过确认
     """
     while True:
         response = client.messages.create(
