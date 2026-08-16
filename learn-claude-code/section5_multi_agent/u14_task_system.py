@@ -1,532 +1,438 @@
 """
-U14 - Task System（任务系统）
-==============================
-本文件演示 Claude Code 的 **Task System**：如何将复杂工作分解为可管理的任务单元。
+s14: 任务系统 — 基于文件持久化的任务图，支持 blockedBy 依赖关系。
 
-核心概念：
-  1. Task System 是协调多步骤工作的核心机制
-  2. 每个任务有明确的输入、输出和状态
-  3. 任务之间可以有依赖关系（DAG - 有向无环图）
-  4. 系统自动解析依赖顺序，按拓扑序执行
-  5. 支持失败重试机制
+运行:  python s14_task_system/code.py
+依赖:  pip install anthropic python-dotenv + .env 中配置 ANTHROPIC_API_KEY
 
-Claude Code 原始实现：
-  ┌──────────────────────────────────────────────────────────┐
-  │  Claude Code 使用 TodoWrite 工具跟踪任务进度：            │
-  │                                                          │
-  │  TodoWrite(todos=[                                       │
-  │      {"id": "1", "content": "准备数据", "status": "..."},│
-  │      {"id": "2", "content": "处理数据", "status": "...", │
-  │       "dependencies": ["1"]},                            │
-  │      {"id": "3", "content": "生成报告", "status": "...", │
-  │       "dependencies": ["2"]},                            │
-  │  ])                                                      │
-  └──────────────────────────────────────────────────────────┘
+相比 s11 的变更:
+  - Task dataclass（包含 id, subject, description, status, owner, blockedBy）
+  - TASKS_DIR = .tasks/ 用于持久化 JSON 存储
+  - create_task / save_task / load_task / list_tasks / get_task 函数
+  - can_start: 检查 blockedBy 依赖是否全部完成（缺失依赖 = 被阻塞）
+  - claim_task: 设置 owner 并将状态从 pending 转为 in_progress
+  - complete_task: 标记完成并报告下游被解除阻塞的任务
+  - 新增 5 个工具: create_task, list_tasks, get_task, claim_task, complete_task
 
-任务生命周期：
-  Created → Pending → Running → Completed
-                       ↓
-                    Failed → Retrying → Running
-
-依赖解析：
-  ┌──────┐     ┌──────┐     ┌──────┐     ┌──────┐     ┌──────┐
-  │ 准备 │ ──→ │ 清洗 │ ──→ │ 分析 │ ──→ │ 验证 │ ──→ │ 报告 │
-  │ 数据 │     │ 数据 │     │ 数据 │     │ 结果 │     │      │
-  └──────┘     └──────┘     └──────┘     └──────┘     └──────┘
-
-  系统按拓扑序执行：准备 → 清洗 → 分析 → 验证 → 报告
-
-本文件是纯 Python 实现，不依赖 anthropic SDK。
-使用 dataclass 和枚举模拟 Claude Code 的任务系统。
+注意: 教学代码保持了基本的 agent loop，聚焦于任务系统演示。
+s11 的完整错误恢复机制（RecoveryState, backoff, escalation,
+reactive compact, fallback model）在此省略 — 在真实的 Claude Code 中，
+tasks.ts 和 withRetry 是独立的层，可以自然组合。
 """
-
-import os
+import os, json, subprocess
+import random
 import time
-import uuid
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional, Callable
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from common import create_client
+from dotenv import load_dotenv
 
+# 尝试导入 readline 以支持终端行编辑（如历史记录、光标移动）
+try:
+    import readline
+    # 禁用 bind-tty-special-chars，避免某些终端环境下快捷键冲突
+    readline.parse_and_bind('set bind-tty-special-chars off')
+except ImportError:
+    pass
 
-# ══════════════════════════════════════════════════════════════
-# 第一部分：任务状态枚举
-# ══════════════════════════════════════════════════════════════
+# 加载 .env 环境变量（override=True 强制覆盖已存在的变量）
+load_dotenv(override=True)
+# 如果设置了自定义 base_url，移除 auth_token 以避免冲突
+if os.getenv("ANTHROPIC_BASE_URL"):
+    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-class TaskState(str, Enum):
-    """
-    任务的生命周期状态。
+# ── 基础路径配置 ──
+WORKDIR = Path.cwd()                              # 工作目录
+MEMORY_DIR = WORKDIR / ".memory"                   # 记忆存储目录
+MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"            # 记忆索引文件
+client, MODEL = create_client()                    # 初始化 API 客户端和模型名
 
-    状态转换：
-      CREATED  → PENDING  → RUNNING  → COMPLETED
-                          ↓
-                       FAILED → RETRYING → RUNNING
+# ── 任务系统 (Task System) ──
+# 任务以 JSON 文件形式持久化存储在 .tasks/ 目录中
+TASKS_DIR = WORKDIR / ".tasks"
+TASKS_DIR.mkdir(exist_ok=True)
 
-    说明：
-      - CREATED:   任务刚创建，还未加入执行队列
-      - PENDING:   任务已加入队列，等待依赖满足
-      - RUNNING:   任务正在执行中
-      - COMPLETED: 任务成功完成
-      - FAILED:    任务执行失败（且重试次数已用完）
-      - RETRYING:  任务失败后正在重试
-    """
-    CREATED = "created"
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    RETRYING = "retrying"
-
-
-# ══════════════════════════════════════════════════════════════
-# 第二部分：任务定义
-# ══════════════════════════════════════════════════════════════
 
 @dataclass
 class Task:
-    """
-    任务的完整定义。
+    """任务数据结构 — 支持依赖关系的有向无环图(DAG)节点"""
+    id: str                    # 任务唯一标识（时间戳+随机数生成）
+    subject: str               # 任务标题（简短描述）
+    description: str           # 任务详细描述
+    status: str                # 状态: pending | in_progress | completed
+    owner: str | None          # 任务所有者（多 agent 场景下的分配标识）
+    blockedBy: list[str]       # 依赖的任务 ID 列表（前置任务必须先完成）
 
-    对应 Claude Code 中 TodoWrite 工具的任务项：
-    {
-        "id": "task-001",
-        "content": "准备数据",
-        "status": "pending",
-        "dependencies": ["task-000"]
+
+def _task_path(task_id: str) -> Path:
+    """根据任务 ID 获取对应的 JSON 文件路径"""
+    return TASKS_DIR / f"{task_id}.json"
+
+
+def create_task(subject: str, description: str = "",
+                blockedBy: list[str] | None = None) -> Task:
+    """创建新任务并持久化到文件系统。
+    ID 格式: task_{时间戳}_{4位随机数}，确保唯一性。"""
+    task = Task(
+        id=f"task_{int(time.time())}_{random.randint(0, 9999):04d}",
+        subject=subject,
+        description=description,
+        status="pending",       # 新任务默认状态为"待处理"
+        owner=None,             # 初始无所有者
+        blockedBy=blockedBy or [],
+    )
+    save_task(task)
+    return task
+
+
+def save_task(task: Task):
+    """将任务序列化为 JSON 并写入文件（持久化存储）"""
+    _task_path(task.id).write_text(json.dumps(asdict(task), indent=2))
+
+
+def load_task(task_id: str) -> Task:
+    """从文件反序列化并加载任务对象"""
+    return Task(**json.loads(_task_path(task_id).read_text()))
+
+
+def list_tasks() -> list[Task]:
+    """列出所有任务，按文件名排序（即按创建时间排序）"""
+    return [Task(**json.loads(p.read_text()))
+            for p in sorted(TASKS_DIR.glob("task_*.json"))]
+
+
+def get_task(task_id: str) -> str:
+    """返回任务的完整详情（JSON 格式）"""
+    task = load_task(task_id)
+    return json.dumps(asdict(task), indent=2)
+
+
+def can_start(task_id: str) -> bool:
+    """检查任务是否可以开始执行 — 所有 blockedBy 依赖必须已完成。
+    缺失的依赖任务被视为阻塞状态（安全保守策略）。"""
+    task = load_task(task_id)
+    for dep_id in task.blockedBy:
+        # 依赖文件不存在 → 阻塞
+        if not _task_path(dep_id).exists():
+            return False
+        # 依赖任务未完成 → 阻塞
+        if load_task(dep_id).status != "completed":
+            return False
+    return True
+
+
+def claim_task(task_id: str, owner: str = "agent") -> str:
+    """认领任务：设置所有者并将状态从 pending 转为 in_progress。
+    前置条件：任务必须是 pending 状态且所有依赖已满足。"""
+    task = load_task(task_id)
+    # 只有 pending 状态的任务才能被认领
+    if task.status != "pending":
+        return f"Task {task_id} is {task.status}, cannot claim"
+    # 检查依赖是否满足
+    if not can_start(task_id):
+        deps = [d for d in task.blockedBy
+                if not _task_path(d).exists() or load_task(d).status != "completed"]
+        return f"Blocked by: {deps}"
+    task.owner = owner
+    task.status = "in_progress"
+    save_task(task)
+    print(f"  \033[36m[claim] {task.subject} → in_progress (owner: {owner})\033[0m")
+    return f"Claimed {task.id} ({task.subject})"
+
+
+def complete_task(task_id: str) -> str:
+    """完成任务：标记为 completed 并报告下游被解除阻塞的任务。
+    这是任务依赖链传播的核心 — 完成一个任务可能解锁多个后续任务。"""
+    task = load_task(task_id)
+    # 只有 in_progress 状态的任务才能被标记为完成
+    if task.status != "in_progress":
+        return f"Task {task_id} is {task.status}, cannot complete"
+    task.status = "completed"
+    save_task(task)
+    # 查找因本任务完成而被解除阻塞的下游任务
+    unblocked = [t.subject for t in list_tasks()
+                 if t.status == "pending" and t.blockedBy and can_start(t.id)]
+    print(f"  \033[32m[complete] {task.subject} ✓\033[0m")
+    msg = f"Completed {task.id} ({task.subject})"
+    if unblocked:
+        msg += f"\nUnblocked: {', '.join(unblocked)}"
+        print(f"  \033[33m[unblocked] {', '.join(unblocked)}\033[0m")
+    return msg
+
+
+# ── 提示词组装 (Prompt Assembly) ──
+# 从 s10 同步过来的模块化提示词系统
+
+# 提示词各段落的定义（按模块拆分，便于维护）
+PROMPT_SECTIONS = {
+    "identity": "You are a coding agent. Act, don't explain.",
+    "tools": "Available tools: bash, read_file, write_file, "
+             "create_task, list_tasks, get_task, claim_task, complete_task.",
+    "workspace": f"Working directory: {WORKDIR}",
+    "memory": "Relevant memories are injected below when available.",
+}
+
+
+def assemble_system_prompt(context: dict) -> str:
+    """组装 system prompt — 拼接身份、工具列表、工作区和记忆等段落。"""
+    sections = [PROMPT_SECTIONS["identity"],
+                PROMPT_SECTIONS["tools"],
+                PROMPT_SECTIONS["workspace"]]
+    # 如果有相关记忆，注入到提示词中
+    memories = context.get("memories", "")
+    if memories:
+        sections.append(f"Relevant memories:\n{memories}")
+    return "\n\n".join(sections)
+
+
+# 缓存机制：避免重复组装相同的 system prompt（节省 token 开销）
+_last_context_key, _last_prompt = None, None
+
+
+def get_system_prompt(context: dict) -> str:
+    """获取带缓存的 system prompt — context 未变时直接返回缓存值。"""
+    global _last_context_key, _last_prompt
+    # 将 context 序列化为字符串作为缓存 key
+    key = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
+    if key == _last_context_key and _last_prompt:
+        return _last_prompt
+    _last_context_key = key
+    _last_prompt = assemble_system_prompt(context)
+    return _last_prompt
+
+
+# ── 基础工具 (Tools) ──
+
+def safe_path(p: str) -> Path:
+    """路径安全检查 — 防止路径遍历攻击（Path Traversal）。
+    确保解析后的路径仍在工作目录内。"""
+    path = (WORKDIR / p).resolve()
+    if not path.is_relative_to(WORKDIR):
+        raise ValueError(f"Path escapes workspace: {p}")
+    return path
+
+
+def run_bash(command: str) -> str:
+    """执行 shell 命令 — 限制超时 120 秒，输出截断至 50000 字符。"""
+    try:
+        r = subprocess.run(command, shell=True, cwd=WORKDIR,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr).strip()
+        return out[:50000] if out else "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: Timeout (120s)"
+
+
+def run_read(path: str, limit: int | None = None) -> str:
+    """读取文件内容 — 可选限制行数（用于大文件的分页读取）。"""
+    try:
+        lines = safe_path(path).read_text().splitlines()
+        if limit and limit < len(lines):
+            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_write(path: str, content: str) -> str:
+    """写入文件内容 — 自动创建父目录（mkdir -p 语义）。"""
+    try:
+        fp = safe_path(path)
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(content)
+        return f"Wrote {len(content)} bytes to {path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ── 任务工具包装器 (Task Tool Wrappers) ──
+# 这些函数是 LLM 可调用的工具入口，包装底层任务函数并添加日志输出
+
+def run_create_task(subject: str, description: str = "",
+                    blockedBy: list[str] | None = None) -> str:
+    """工具: 创建任务 — 支持设置依赖关系"""
+    task = create_task(subject, description, blockedBy)
+    deps = f" (blockedBy: {', '.join(blockedBy)})" if blockedBy else ""
+    print(f"  \033[34m[create] {task.subject}{deps}\033[0m")
+    return f"Created {task.id}: {task.subject}{deps}"
+
+
+def run_list_tasks() -> str:
+    """工具: 列出所有任务 — 用图标区分状态（○ 待处理 / ● 进行中 / ✓ 已完成）"""
+    tasks = list_tasks()
+    if not tasks:
+        return "No tasks. Use create_task to add some."
+    lines = []
+    for t in tasks:
+        # 状态图标映射
+        icon = {"pending": "○", "in_progress": "●",
+                "completed": "✓"}.get(t.status, "?")
+        deps = f" (blockedBy: {', '.join(t.blockedBy)})" if t.blockedBy else ""
+        owner = f" [{t.owner}]" if t.owner else ""
+        lines.append(f"  {icon} {t.id}: {t.subject} "
+                     f"[{t.status}]{owner}{deps}")
+    return "\n".join(lines)
+
+
+def run_get_task(task_id: str) -> str:
+    """工具: 获取任务详情（JSON 格式）"""
+    try:
+        return get_task(task_id)
+    except FileNotFoundError:
+        return f"Error: Task {task_id} not found"
+
+
+def run_claim_task(task_id: str) -> str:
+    """工具: 认领任务（默认 owner 为 "agent"）"""
+    return claim_task(task_id, owner="agent")
+
+
+def run_complete_task(task_id: str) -> str:
+    """工具: 完成任务（自动报告下游解除阻塞的任务）"""
+    return complete_task(task_id)
+
+
+# ── 工具定义 (Tool Definitions for LLM) ──
+# 这些 JSON Schema 定义会传给 LLM，让它知道有哪些工具可用以及如何调用
+TOOLS = [
+    {"name": "bash", "description": "Run a shell command.",
+     "input_schema": {"type": "object",
+                      "properties": {"command": {"type": "string"}},
+                      "required": ["command"]}},
+    {"name": "read_file", "description": "Read file contents.",
+     "input_schema": {"type": "object",
+                      "properties": {"path": {"type": "string"},
+                                     "limit": {"type": "integer"}},
+                      "required": ["path"]}},
+    {"name": "write_file", "description": "Write content to a file.",
+     "input_schema": {"type": "object",
+                      "properties": {"path": {"type": "string"},
+                                     "content": {"type": "string"}},
+                      "required": ["path", "content"]}},
+    {"name": "create_task",
+     "description": "Create a new task with optional blockedBy dependencies.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "subject": {"type": "string"},
+                          "description": {"type": "string"},
+                          "blockedBy": {"type": "array",
+                                        "items": {"type": "string"}}},
+                      "required": ["subject"]}},
+    {"name": "list_tasks",
+     "description": "List all tasks with status, owner, and dependencies.",
+     "input_schema": {"type": "object", "properties": {},
+                      "required": []}},
+    {"name": "get_task",
+     "description": "Get full details of a specific task by ID.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+    {"name": "claim_task",
+     "description": "Claim a pending task. Sets owner, changes status to in_progress.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+    {"name": "complete_task",
+     "description": "Complete an in-progress task. Reports unblocked downstream tasks.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+]
+
+# 工具名称 → 处理函数的映射（调度器核心）
+TOOL_HANDLERS = {
+    "bash": run_bash, "read_file": run_read, "write_file": run_write,
+    "create_task": run_create_task, "list_tasks": run_list_tasks,
+    "get_task": run_get_task, "claim_task": run_claim_task,
+    "complete_task": run_complete_task,
+}
+
+
+# ── 上下文管理 (Context) ──
+
+def update_context(context: dict, messages: list) -> dict:
+    """从实际状态派生上下文 — 包含已启用工具、工作区路径和相关记忆。"""
+    memories = ""
+    if MEMORY_INDEX.exists():
+        content = MEMORY_INDEX.read_text().strip()
+        if content:
+            memories = content
+    return {
+        "enabled_tools": list(TOOL_HANDLERS.keys()),
+        "workspace": str(WORKDIR),
+        "memories": memories,
     }
 
-    字段说明：
-      - task_id:       任务唯一标识符
-      - name:          任务名称（人类可读）
-      - task_type:     任务类型，决定使用哪个执行器
-      - description:   任务描述
-      - input_data:    任务输入参数（字典）
-      - output_data:   任务执行结果
-      - state:         当前状态
-      - error:         错误信息（失败时）
-      - dependencies:  依赖的任务 ID 列表
-      - max_retries:   最大重试次数
-      - retry_count:   当前重试次数
-      - created_at:    创建时间戳
-      - started_at:    开始执行时间戳
-      - completed_at:  完成时间戳
-    """
-    task_id: str
-    name: str
-    task_type: str               # "bash" | "print" | "agent" | "edit" | "verify"
-    description: str = ""
-    input_data: dict = field(default_factory=dict)
-    output_data: Any = None
-    state: TaskState = TaskState.CREATED
-    error: Optional[str] = None
-    dependencies: list[str] = field(default_factory=list)
-    max_retries: int = 2
-    retry_count: int = 0
-    created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
 
+# ── Agent 主循环 (简化版，聚焦任务系统演示) ──
 
-# ══════════════════════════════════════════════════════════════
-# 第三部分：任务执行器
-# ══════════════════════════════════════════════════════════════
-
-class TaskExecutor:
-    """
-    任务执行器的基类。
-
-    执行器是 Task System 的核心组件：
-      - 每种 task_type 对应一个执行器
-      - 执行器负责实际执行任务逻辑
-      - 通过 register_executor() 注册到系统
-
-    Claude Code 中的执行器类型：
-      - bash:   执行 shell 命令
-      - read:   读取文件
-      - write:  写入文件
-      - edit:   编辑文件
-      - agent:  调用子 Agent
-    """
-
-    def execute(self, task: Task) -> Any:
-        """
-        执行任务。子类必须实现此方法。
-
-        Args:
-            task: 要执行的任务
-
-        Returns:
-            Any: 任务执行结果
-
-        Raises:
-            Exception: 执行失败时抛出异常
-        """
-        raise NotImplementedError
-
-
-class BashExecutor(TaskExecutor):
-    """
-    执行 shell 命令的任务执行器。
-
-    对应 Claude Code 的 Bash 工具：
-      - 通过 subprocess 执行命令
-      - 捕获 stdout 和 stderr
-      - 非零退出码视为失败
-    """
-
-    def execute(self, task: Task) -> str:
-        import subprocess
-        command = task.input_data.get("command", "")
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"Command failed: {result.stderr}")
-        return result.stdout
-
-
-class PrintExecutor(TaskExecutor):
-    """
-    演示用的打印执行器。
-
-    不执行实际操作，只打印消息。
-    用于演示 Task System 的工作流程。
-    """
-
-    def execute(self, task: Task) -> str:
-        message = task.input_data.get("message", task.name)
-        print(f"    执行任务: {message}")
-        return f"完成: {message}"
-
-
-# ══════════════════════════════════════════════════════════════
-# 第四部分：任务系统
-# ══════════════════════════════════════════════════════════════
-
-class TaskSystem:
-    """
-    任务系统：管理和执行任务的 DAG（有向无环图）。
-
-    核心功能：
-      1. register_executor() - 注册任务执行器
-      2. create_task()       - 创建任务
-      3. get_ready_tasks()   - 获取可执行的任务（依赖已满足）
-      4. execute_task()      - 执行单个任务（含重试）
-      5. run_all()           - 执行所有任务（自动处理依赖顺序）
-      6. print_status()      - 打印任务状态
-
-    执行流程（run_all）：
-      ① 找到所有就绪的节点（依赖已满足且未执行）
-      ② 执行它们
-      ③ 重复直到所有节点完成或没有可执行的节点
-      ④ 返回执行结果统计
-
-    这个流程类似于 LangGraph 的图执行：
-      - get_ready_tasks() = 找到所有入度为 0 的节点
-      - execute_task()    = 执行节点
-      - run_all()         = 拓扑排序 + 顺序执行
-    """
-
-    def __init__(self):
-        # 任务字典：task_id → Task
-        self.tasks: dict[str, Task] = {}
-        # 执行器字典：task_type → TaskExecutor
-        self.executors: dict[str, TaskExecutor] = {
-            "bash": BashExecutor(),
-            "print": PrintExecutor(),
-        }
-        # 执行日志
-        self.execution_log: list[dict] = []
-
-    def register_executor(self, task_type: str, executor: TaskExecutor):
-        """
-        注册任务执行器。
-
-        通过 task_type 将任务路由到对应的执行器。
-
-        Args:
-            task_type: 任务类型标识符
-            executor:  执行器实例
-        """
-        self.executors[task_type] = executor
-
-    def create_task(
-        self,
-        name: str,
-        task_type: str,
-        input_data: dict = None,
-        dependencies: list[str] = None,
-        description: str = "",
-    ) -> Task:
-        """
-        创建一个新任务。
-
-        Args:
-            name:         任务名称
-            task_type:    任务类型（决定使用哪个执行器）
-            input_data:   任务输入参数
-            dependencies: 依赖的任务 ID 列表
-            description:  任务描述
-
-        Returns:
-            Task: 创建的任务对象
-        """
-        task = Task(
-            task_id=str(uuid.uuid4())[:8],
-            name=name,
-            task_type=task_type,
-            description=description,
-            input_data=input_data or {},
-            dependencies=dependencies or [],
-        )
-        self.tasks[task.task_id] = task
-        return task
-
-    def get_ready_tasks(self) -> list[Task]:
-        """
-        获取所有可以执行的任务。
-
-        判断条件：
-          1. 任务状态为 CREATED 或 PENDING
-          2. 所有依赖任务的状态都是 COMPLETED
-
-        这是 DAG 执行的核心逻辑：
-          - 找到所有"入度为 0"的未执行节点
-          - 这些节点的依赖已经全部完成
-          - 可以安全地并行执行
-
-        Returns:
-            list[Task]: 可执行的任务列表
-        """
-        ready = []
-        for task in self.tasks.values():
-            # 只考虑 CREATED 或 PENDING 状态的任务
-            if task.state not in (TaskState.CREATED, TaskState.PENDING):
-                continue
-
-            # 检查所有依赖是否已完成
-            deps_met = all(
-                self.tasks.get(dep_id, Task("", "", "")).state == TaskState.COMPLETED
-                for dep_id in task.dependencies
-            )
-
-            if deps_met:
-                ready.append(task)
-
-        return ready
-
-    def execute_task(self, task: Task) -> bool:
-        """
-        执行单个任务。
-
-        执行流程：
-          1. 查找对应的执行器
-          2. 更新状态为 RUNNING
-          3. 调用执行器执行
-          4. 成功：更新为 COMPLETED
-          5. 失败：重试（如果还有重试次数）或标记为 FAILED
-
-        Args:
-            task: 要执行的任务
-
-        Returns:
-            bool: 是否执行成功
-        """
-        # 查找执行器
-        executor = self.executors.get(task.task_type)
-        if not executor:
-            task.state = TaskState.FAILED
-            task.error = f"No executor for type '{task.task_type}'"
-            return False
-
-        # 更新状态
-        task.state = TaskState.RUNNING
-        task.started_at = time.time()
-
+def agent_loop(messages: list, context: dict):
+    """Agent 核心循环：发送请求 → 处理工具调用 → 循环直到 LLM 停止调用工具。
+    这是一个简化的版本，省略了 s11 的错误恢复机制。"""
+    system = get_system_prompt(context)
+    while True:
+        # 1. 调用 LLM API
         try:
-            # 执行任务
-            result = executor.execute(task)
-            task.output_data = result
-            task.state = TaskState.COMPLETED
-            task.completed_at = time.time()
-
-            # 记录执行日志
-            self.execution_log.append({
-                "task_id": task.task_id,
-                "name": task.name,
-                "state": "completed",
-                "duration": task.completed_at - task.started_at,
-            })
-            return True
-
+            response = client.messages.create(
+                model=MODEL, system=system, messages=messages,
+                tools=TOOLS, max_tokens=8000)
         except Exception as e:
-            task.error = str(e)
-            task.retry_count += 1
+            # API 调用失败时，将错误信息加入对话并退出循环
+            messages.append({"role": "assistant", "content": [
+                {"type": "text",
+                 "text": f"[Error] {type(e).__name__}: {e}"}]})
+            return
 
-            # 检查是否可以重试
-            if task.retry_count < task.max_retries:
-                # 标记为重试中，然后递归调用
-                task.state = TaskState.RETRYING
-                return self.execute_task(task)
-            else:
-                # 重试次数用完，标记为失败
-                task.state = TaskState.FAILED
-                task.completed_at = time.time()
+        # 2. 将 LLM 回复追加到消息历史
+        messages.append({"role": "assistant", "content": response.content})
 
-                self.execution_log.append({
-                    "task_id": task.task_id,
-                    "name": task.name,
-                    "state": "failed",
-                    "error": str(e),
-                })
-                return False
+        # 3. 如果 LLM 不再请求工具调用，循环结束（任务完成）
+        if response.stop_reason != "tool_use":
+            return
 
-    def run_all(self) -> dict:
-        """
-        执行所有任务（自动处理依赖顺序）。
+        # 4. 处理所有工具调用请求（批量执行）
+        results = []
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+            print(f"\033[36m> {block.name}\033[0m")
+            # 通过调度器找到对应的处理函数并执行
+            handler = TOOL_HANDLERS.get(block.name)
+            output = handler(**block.input) if handler else f"Unknown: {block.name}"
+            print(str(output)[:300])
+            results.append({"type": "tool_result",
+                            "tool_use_id": block.id, "content": output})
 
-        算法：类似拓扑排序
-          ① 找到所有就绪的节点（依赖已满足）
-          ② 执行它们
-          ③ 重复直到所有节点完成或没有可执行的节点
-          ④ 返回执行结果统计
-
-        防止无限循环：最多迭代 100 次。
-
-        Returns:
-            dict: 执行结果统计
-                - total:     总任务数
-                - completed: 完成的任务数
-                - failed:    失败的任务数
-                - log:       执行日志
-        """
-        max_iterations = 100
-        iteration = 0
-
-        while iteration < max_iterations:
-            ready = self.get_ready_tasks()
-            if not ready:
-                break
-
-            for task in ready:
-                task.state = TaskState.PENDING
-                self.execute_task(task)
-
-            iteration += 1
-
-        # 统计结果
-        completed = sum(1 for t in self.tasks.values() if t.state == TaskState.COMPLETED)
-        failed = sum(1 for t in self.tasks.values() if t.state == TaskState.FAILED)
-
-        return {
-            "total": len(self.tasks),
-            "completed": completed,
-            "failed": failed,
-            "log": self.execution_log,
-        }
-
-    def print_status(self):
-        """打印所有任务的状态。"""
-        for task in self.tasks.values():
-            deps = ", ".join(task.dependencies) if task.dependencies else "无"
-            state_str = task.state.value.rjust(10)
-            print(f"  [{state_str}] {task.name} (依赖: {deps})")
-            if task.error:
-                print(f"               错误: {task.error}")
+        # 5. 将工具执行结果作为 user 消息返回给 LLM（让它看到结果并决定下一步）
+        messages.append({"role": "user", "content": results})
+        # 6. 更新上下文（记忆可能已变化）并重新组装 system prompt
+        context = update_context(context, messages)
+        system = get_system_prompt(context)
 
 
-# ══════════════════════════════════════════════════════════════
-# 第五部分：程序入口
-# ══════════════════════════════════════════════════════════════
+# ── 主程序入口 (Main) ──
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("U14 - Task System 任务系统演示")
-    print("=" * 60)
-
-    system = TaskSystem()
-
-    # ── 创建有依赖关系的任务 ──────────────────────────────
-    # 这 5 个任务形成一条依赖链：
-    #   准备数据 → 数据清洗 → 数据分析 → 验证结果 → 生成报告
-    print("\n── 创建任务（5 个，形成依赖链）──")
-
-    t1 = system.create_task(
-        name="准备数据",
-        task_type="print",
-        input_data={"message": "从数据库加载原始数据"},
-    )
-    print(f"  创建: {t1.name} (id: {t1.task_id})")
-
-    t2 = system.create_task(
-        name="数据清洗",
-        task_type="print",
-        input_data={"message": "清理和标准化数据"},
-        dependencies=[t1.task_id],  # 依赖 t1
-    )
-    print(f"  创建: {t2.name} (id: {t2.task_id}, 依赖: {t1.task_id})")
-
-    t3 = system.create_task(
-        name="数据分析",
-        task_type="print",
-        input_data={"message": "执行统计分析"},
-        dependencies=[t2.task_id],  # 依赖 t2
-    )
-    print(f"  创建: {t3.name} (id: {t3.task_id}, 依赖: {t2.task_id})")
-
-    t4 = system.create_task(
-        name="验证结果",
-        task_type="print",
-        input_data={"message": "检查分析结果的正确性"},
-        dependencies=[t3.task_id],  # 依赖 t3
-    )
-    print(f"  创建: {t4.name} (id: {t4.task_id}, 依赖: {t3.task_id})")
-
-    t5 = system.create_task(
-        name="生成报告",
-        task_type="print",
-        input_data={"message": "生成最终报告"},
-        dependencies=[t4.task_id],  # 依赖 t4
-    )
-    print(f"  创建: {t5.name} (id: {t5.task_id}, 依赖: {t4.task_id})")
-
-    print(f"\n  共创建 {len(system.tasks)} 个任务")
-
-    # ── 执行前状态 ────────────────────────────────────────
-    print("\n── 任务状态（执行前）──")
-    system.print_status()
-
-    # ── 执行所有任务 ──────────────────────────────────────
-    print("\n── 执行任务（按依赖顺序）──")
-    result = system.run_all()
-
-    # ── 执行后状态 ────────────────────────────────────────
-    print("\n── 任务状态（执行后）──")
-    system.print_status()
-
-    # ── 执行摘要 ──────────────────────────────────────────
-    print(f"\n── 执行摘要 ──")
-    print(f"  总任务: {result['total']}")
-    print(f"  完成:   {result['completed']}")
-    print(f"  失败:   {result['failed']}")
-
-    # ── Claude Code 说明 ──────────────────────────────────
-    print("\n── Claude Code Task System 机制说明 ──")
-    print("""
-    Claude Code 使用 TodoWrite 工具跟踪多步骤任务：
-
-    1. 创建任务列表：
-       TodoWrite(todos=[
-           {"id": "1", "content": "准备数据", "status": "pending"},
-           {"id": "2", "content": "处理数据", "status": "pending",
-            "dependencies": ["1"]},
-       ])
-
-    2. 任务状态更新：
-       - pending    → 进行中
-       - completed  → 已完成
-       - in_progress → 正在执行
-
-    3. Agent 可以：
-       - 创建任务计划
-       - 按依赖顺序执行
-       - 跟踪进度
-       - 处理失败和重试
-    """)
+    print("s14: task system")
+    print("Enter a question, press Enter to send. Type q to quit.\n")
+    history = []                        # 消息历史（跨轮次累积）
+    context = update_context({}, [])    # 初始化上下文
+    while True:
+        # 交互式输入（支持 readline 的行编辑功能）
+        try:
+            query = input("\033[36ms12 >> \033[0m")
+        except (EOFError, KeyboardInterrupt):
+            break
+        # 退出命令检测
+        if query.strip().lower() in ("q", "exit", ""):
+            break
+        # 将用户输入加入消息历史，启动 agent 循环
+        history.append({"role": "user", "content": query})
+        agent_loop(history, context)
+        context = update_context(context, history)
+        # 打印 LLM 的文本回复（跳过工具调用块）
+        for block in history[-1]["content"]:
+            if getattr(block, "type", None) == "text":
+                print(block.text)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                print(block.get("text", ""))
+        print()

@@ -1,534 +1,882 @@
+#!/usr/bin/env python3
 """
-U16 - Team Protocols（团队协议）
-=================================
-本文件演示 Claude Code 代理团队的 **协作协议**：代理之间如何通信和协调。
+s16: Team Protocols — request-response protocol + request_id + dispatch + state machine.
 
-核心概念：
-  1. 协议定义了代理之间的交互规则
-  2. 消息格式：代理间通信的标准格式
-  3. 消息总线：代理间通信的基础设施
-  4. 协作模式：请求-响应、审查循环、广播等
+Run:  python s16_team_protocols/code.py
+Need: pip install anthropic python-dotenv + .env with ANTHROPIC_API_KEY
 
-Claude Code 原始实现：
-  ┌──────────────────────────────────────────────────────────┐
-  │  Claude Code 代理间通信机制：                              │
-  │                                                          │
-  │  1. 主代理通过 SendMessage 工具向子代理发送消息           │
-  │  2. 子代理完成后通过通知机制返回结果                      │
-  │  3. 使用 Agent ID 标识消息来源和目标                      │
-  │  4. 支持同步和异步消息传递                                │
-  └──────────────────────────────────────────────────────────┘
+Changes from s15:
+  - ProtocolState dataclass (request_id, type, sender, status, created_at)
+  - pending_requests dict: tracks in-flight protocol requests
+  - dispatch_message: routes incoming messages by type to handlers
+  - request_shutdown: Lead sends shutdown protocol request
+  - request_plan: Lead asks teammate to submit plan
+  - handle_shutdown_request / handle_plan_response: teammate receives & responds
+  - match_response: Lead correlates response to request via request_id (with type validation)
+  - Teammate idle loop: waits for inbox messages instead of exiting after 10 rounds
+  - Unified consume_lead_inbox: protocol routing + injection into history
+  - 3 new Lead tools: request_shutdown, request_plan, review_plan
+  - 1 new teammate tool: submit_plan
 
-协作模式：
-  ┌──────────────────────────────────────────────────────────┐
-  │  1. 请求-响应（Request-Response）                         │
-  │     代理 A 发送请求 → 代理 B 处理 → 代理 B 返回响应      │
-  │                                                          │
-  │  2. 审查循环（Review Cycle）                              │
-  │     作者提交代码 → 审查者审查 → 作者修改 → 审查者确认    │
-  │                                                          │
-  │  3. 广播（Broadcast）                                     │
-  │     一个代理向所有代理发送消息（如状态更新）              │
-  │                                                          │
-  │  4. 管道（Pipeline）                                      │
-  │     代理 A → 代理 B → 代理 C（链式传递）                 │
-  └──────────────────────────────────────────────────────────┘
-
-本文件是纯 Python 实现，不依赖 anthropic SDK。
-使用消息队列和回调机制模拟代理间通信。
+ASCII flow:
+  Lead: BUS.send("shutdown_request", {request_id}) ──────→ teammate inbox
+  Teammate: dispatch → handler → BUS.send("shutdown_response", {request_id}) ─→ Lead inbox
+  Lead: consume_lead_inbox → match_response(request_id) → pending_requests[req_id].status = approved
 """
 
-import time
-import uuid
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
-from collections import deque
+import os, subprocess, json, time, random, threading
+from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass, asdict, field
 
+try:
+    import readline
+    readline.parse_and_bind('set bind-tty-special-chars off')
+except ImportError:
+    pass
 
-# ══════════════════════════════════════════════════════════════
-# 第一部分：消息类型和优先级
-# ══════════════════════════════════════════════════════════════
+from anthropic import Anthropic
+from dotenv import load_dotenv
 
-class MessageType(str, Enum):
-    """
-    代理间通信的消息类型。
+load_dotenv(override=True)
+if os.getenv("ANTHROPIC_BASE_URL"):
+    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-    Claude Code 中的消息类型：
-      - TASK:     任务分配（主代理 → 子代理）
-      - RESULT:   任务结果（子代理 → 主代理）
-      - FEEDBACK: 反馈信息（审查者 → 作者）
-      - QUERY:    查询请求（代理 A → 代理 B）
-      - STATUS:   状态更新（广播给所有代理）
-      - ERROR:    错误通知
-    """
-    TASK = "task"
-    RESULT = "result"
-    FEEDBACK = "feedback"
-    QUERY = "query"
-    STATUS = "status"
-    ERROR = "error"
+WORKDIR = Path.cwd()
+MEMORY_DIR = WORKDIR / ".memory"
+MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
+client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
+MODEL = os.environ["MODEL_ID"]
 
+# ── Task System (from s12, synced) ──
 
-class Priority(str, Enum):
-    """
-    消息优先级。
+TASKS_DIR = WORKDIR / ".tasks"
+TASKS_DIR.mkdir(exist_ok=True)
 
-    高优先级消息会被优先处理。
-    Claude Code 中：
-      - HIGH:   安全问题、构建失败
-      - NORMAL: 普通任务分配
-      - LOW:    状态更新、日志
-    """
-    HIGH = "high"
-    NORMAL = "normal"
-    LOW = "low"
-
-
-# ══════════════════════════════════════════════════════════════
-# 第二部分：消息结构
-# ══════════════════════════════════════════════════════════════
 
 @dataclass
-class Message:
-    """
-    代理间通信的消息。
-
-    对应 Claude Code 的 SendMessage 工具参数：
-    {
-        "to": "agent-id",
-        "summary": "简短摘要",
-        "message": "详细内容"
-    }
-
-    字段说明：
-      - message_id:  消息唯一标识符
-      - from_agent:  发送方代理名称
-      - to_agent:    接收方代理名称
-      - msg_type:    消息类型
-      - content:     消息内容（可以是任意类型）
-      - priority:    消息优先级
-      - timestamp:   消息创建时间戳
-      - in_reply_to: 回复的消息 ID（用于关联请求和响应）
-    """
-    message_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
-    from_agent: str = ""
-    to_agent: str = ""
-    msg_type: MessageType = MessageType.TASK
-    content: Any = None
-    priority: Priority = Priority.NORMAL
-    timestamp: float = field(default_factory=time.time)
-    in_reply_to: Optional[str] = None
+class Task:
+    id: str
+    subject: str
+    description: str
+    status: str          # pending | in_progress | completed
+    owner: str | None
+    blockedBy: list[str]
 
 
-# ══════════════════════════════════════════════════════════════
-# 第三部分：消息总线
-# ══════════════════════════════════════════════════════════════
+def _task_path(task_id: str) -> Path:
+    return TASKS_DIR / f"{task_id}.json"
+
+
+def create_task(subject: str, description: str = "",
+                blockedBy: list[str] | None = None) -> Task:
+    task = Task(
+        id=f"task_{int(time.time())}_{random.randint(0, 9999):04d}",
+        subject=subject, description=description,
+        status="pending", owner=None,
+        blockedBy=blockedBy or [],
+    )
+    save_task(task)
+    return task
+
+
+def save_task(task: Task):
+    _task_path(task.id).write_text(json.dumps(asdict(task), indent=2))
+
+
+def load_task(task_id: str) -> Task:
+    return Task(**json.loads(_task_path(task_id).read_text()))
+
+
+def list_tasks() -> list[Task]:
+    return [Task(**json.loads(p.read_text()))
+            for p in sorted(TASKS_DIR.glob("task_*.json"))]
+
+
+def get_task(task_id: str) -> str:
+    """Return full task details as JSON."""
+    task = load_task(task_id)
+    return json.dumps(asdict(task), indent=2)
+
+
+def can_start(task_id: str) -> bool:
+    """Check if all blockedBy dependencies are completed.
+    Missing dependencies are treated as blocked."""
+    task = load_task(task_id)
+    for dep_id in task.blockedBy:
+        if not _task_path(dep_id).exists():
+            return False
+        if load_task(dep_id).status != "completed":
+            return False
+    return True
+
+
+def claim_task(task_id: str, owner: str = "agent") -> str:
+    task = load_task(task_id)
+    if task.status != "pending":
+        return f"Task {task_id} is {task.status}, cannot claim"
+    if not can_start(task_id):
+        deps = [d for d in task.blockedBy
+                if not _task_path(d).exists() or load_task(d).status != "completed"]
+        return f"Blocked by: {deps}"
+    task.owner = owner
+    task.status = "in_progress"
+    save_task(task)
+    print(f"  \033[36m[claim] {task.subject} → in_progress (owner: {owner})\033[0m")
+    return f"Claimed {task.id} ({task.subject})"
+
+
+def complete_task(task_id: str) -> str:
+    task = load_task(task_id)
+    if task.status != "in_progress":
+        return f"Task {task_id} is {task.status}, cannot complete"
+    task.status = "completed"
+    save_task(task)
+    unblocked = [t.subject for t in list_tasks()
+                 if t.status == "pending" and t.blockedBy and can_start(t.id)]
+    print(f"  \033[32m[complete] {task.subject} ✓\033[0m")
+    msg = f"Completed {task.id} ({task.subject})"
+    if unblocked:
+        msg += f"\nUnblocked: {', '.join(unblocked)}"
+        print(f"  \033[33m[unblocked] {', '.join(unblocked)}\033[0m")
+    return msg
+
+
+# ── Prompt Assembly (from s10, synced) ──
+
+PROMPT_SECTIONS = {
+    "identity": "You are a coding agent. Act, don't explain.",
+    "tools": "Available tools: bash, read_file, write_file, "
+             "get_task, create_task, list_tasks, claim_task, complete_task, "
+             "spawn_teammate, send_message, check_inbox, "
+             "request_shutdown, request_plan, review_plan.",
+    "workspace": f"Working directory: {WORKDIR}",
+    "memory": "Relevant memories are injected below when available.",
+}
+
+
+def assemble_system_prompt(context: dict) -> str:
+    sections = [PROMPT_SECTIONS["identity"],
+                PROMPT_SECTIONS["tools"],
+                PROMPT_SECTIONS["workspace"]]
+    memories = context.get("memories", "")
+    if memories:
+        sections.append(f"Relevant memories:\n{memories}")
+    return "\n\n".join(sections)
+
+
+_last_context_key, _last_prompt = None, None
+
+
+def get_system_prompt(context: dict) -> str:
+    global _last_context_key, _last_prompt
+    key = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
+    if key == _last_context_key and _last_prompt:
+        return _last_prompt
+    _last_context_key = key
+    _last_prompt = assemble_system_prompt(context)
+    return _last_prompt
+
+
+# ── Tools ──
+
+def safe_path(p: str) -> Path:
+    path = (WORKDIR / p).resolve()
+    if not path.is_relative_to(WORKDIR):
+        raise ValueError(f"Path escapes workspace: {p}")
+    return path
+
+
+def run_bash(command: str, run_in_background: bool = False) -> str:
+    # run_in_background is handled by agent_loop dispatch, not here
+    try:
+        r = subprocess.run(command, shell=True, cwd=WORKDIR,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr).strip()
+        return out[:50000] if out else "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: Timeout (120s)"
+
+
+def run_read(path: str, limit: int | None = None) -> str:
+    try:
+        lines = safe_path(path).read_text().splitlines()
+        if limit and limit < len(lines):
+            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_write(path: str, content: str) -> str:
+    try:
+        fp = safe_path(path)
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(content)
+        return f"Wrote {len(content)} bytes to {path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# Task tools
+
+def run_create_task(subject: str, description: str = "",
+                    blockedBy: list[str] | None = None) -> str:
+    task = create_task(subject, description, blockedBy)
+    deps = f" (blockedBy: {', '.join(blockedBy)})" if blockedBy else ""
+    print(f"  \033[34m[create] {task.subject}{deps}\033[0m")
+    return f"Created {task.id}: {task.subject}{deps}"
+
+
+def run_list_tasks() -> str:
+    tasks = list_tasks()
+    if not tasks:
+        return "No tasks. Use create_task to add some."
+    lines = []
+    for t in tasks:
+        icon = {"pending": "○", "in_progress": "●",
+                "completed": "✓"}.get(t.status, "?")
+        deps = f" (blockedBy: {', '.join(t.blockedBy)})" if t.blockedBy else ""
+        owner = f" [{t.owner}]" if t.owner else ""
+        lines.append(f"  {icon} {t.id}: {t.subject} "
+                     f"[{t.status}]{owner}{deps}")
+    return "\n".join(lines)
+
+
+def run_get_task(task_id: str) -> str:
+    try:
+        return get_task(task_id)
+    except FileNotFoundError:
+        return f"Error: Task {task_id} not found"
+
+
+def run_claim_task(task_id: str) -> str:
+    return claim_task(task_id, owner="agent")
+
+
+def run_complete_task(task_id: str) -> str:
+    return complete_task(task_id)
+
+
+# ── Background Tasks (from s13, synced) ──
+
+_bg_counter = 0
+background_tasks: dict[str, dict] = {}
+background_results: dict[str, str] = {}
+background_lock = threading.Lock()
+
+
+def is_slow_operation(tool_name: str, tool_input: dict) -> bool:
+    """Fallback heuristic: commands likely to take > 30s."""
+    if tool_name != "bash":
+        return False
+    cmd = tool_input.get("command", "").lower()
+    slow_keywords = ["install", "build", "test", "deploy", "compile",
+                     "docker build", "pip install", "npm install",
+                     "cargo build", "pytest", "make"]
+    return any(kw in cmd for kw in slow_keywords)
+
+
+def should_run_background(tool_name: str, tool_input: dict) -> bool:
+    """Model explicit request takes priority; fallback to heuristic."""
+    if tool_input.get("run_in_background"):
+        return True
+    return is_slow_operation(tool_name, tool_input)
+
+
+def start_background_task(block) -> str:
+    """Run tool in a daemon thread. Returns background task ID."""
+    global _bg_counter
+    _bg_counter += 1
+    bg_id = f"bg_{_bg_counter:04d}"
+    cmd = block.input.get("command", block.name)
+
+    def worker():
+        result = execute_tool(block)
+        with background_lock:
+            background_tasks[bg_id]["status"] = "completed"
+            background_results[bg_id] = result
+
+    with background_lock:
+        background_tasks[bg_id] = {
+            "tool_use_id": block.id,
+            "command": cmd,
+            "status": "running",
+        }
+    threading.Thread(target=worker, daemon=True).start()
+    print(f"  \033[33m[background] dispatched {bg_id}: {cmd[:40]}\033[0m")
+    return bg_id
+
+
+def collect_background_results() -> list[str]:
+    """Collect completed background results as task_notification messages."""
+    with background_lock:
+        ready_ids = [bid for bid, task in background_tasks.items()
+                     if task["status"] == "completed"]
+    notifications = []
+    for bg_id in ready_ids:
+        with background_lock:
+            task = background_tasks.pop(bg_id)
+            output = background_results.pop(bg_id, "")
+        summary = output[:200] if len(output) > 200 else output
+        notifications.append(
+            f"<task_notification>\n"
+            f"  <task_id>{bg_id}</task_id>\n"
+            f"  <status>completed</status>\n"
+            f"  <command>{task['command']}</command>\n"
+            f"  <summary>{summary}</summary>\n"
+            f"</task_notification>")
+        print(f"  \033[32m[background done] {bg_id}: "
+              f"{task['command'][:40]} ({len(output)} chars)\033[0m")
+    return notifications
+
+
+# ── MessageBus (from s15) ──
+
+MAILBOX_DIR = WORKDIR / ".mailboxes"
+MAILBOX_DIR.mkdir(exist_ok=True)
+
 
 class MessageBus:
-    """
-    消息总线：代理间通信的基础设施。
+    """File-based message bus. Each agent has a .jsonl inbox.
+    Read is destructive: read_text + unlink (consumes messages).
+    Teaching version: no file locking; real CC uses proper-lockfile."""
 
-    提供以下功能：
-      1. register_agent() - 注册代理到消息总线
-      2. send()           - 发送消息到目标代理
-      3. broadcast()      - 广播消息给所有代理
-      4. receive()        - 从代理的队列中接收消息
-      5. subscribe()      - 订阅代理的消息（回调）
-      6. get_history()    - 获取消息历史
+    def send(self, from_agent: str, to_agent: str, content: str,
+             msg_type: str = "message", metadata: dict = None):
+        msg = {"from": from_agent, "to": to_agent,
+               "content": content, "type": msg_type,
+               "ts": time.time(), "metadata": metadata or {}}
+        inbox = MAILBOX_DIR / f"{to_agent}.jsonl"
+        with open(inbox, "a") as f:
+            f.write(json.dumps(msg) + "\n")
+        print(f"  \033[33m[bus] {from_agent} → {to_agent}: "
+              f"({msg_type}) {content[:50]}\033[0m")
 
-    实现原理：
-      - 每个代理有一个消息队列（deque）
-      - 发送消息时，放入目标代理的队列
-      - 接收消息时，从自己的队列中取出
-      - 订阅机制支持消息到达时的回调
-
-    Claude Code 中的对应关系：
-      - MessageBus    → Claude 的 Agent 通信机制
-      - send()        → SendMessage 工具
-      - broadcast()   → 状态更新通知
-      - receive()     → 子代理完成通知
-    """
-
-    def __init__(self):
-        # 代理消息队列：agent_name → deque[Message]
-        self.queues: dict[str, deque] = {}
-        # 消息历史（所有已发送的消息）
-        self.history: list[Message] = []
-        # 订阅者：agent_name → [callback, ...]
-        self.subscribers: dict[str, list[callable]] = {}
-
-    def register_agent(self, agent_name: str):
-        """
-        注册一个代理到消息总线。
-
-        注册后，代理就有了自己的消息队列，可以收发消息。
-
-        Args:
-            agent_name: 代理名称（唯一标识）
-        """
-        if agent_name not in self.queues:
-            self.queues[agent_name] = deque()
-
-    def send(self, message: Message) -> bool:
-        """
-        发送消息到目标代理。
-
-        流程：
-          1. 检查目标代理是否已注册
-          2. 将消息放入目标代理的队列
-          3. 记录到消息历史
-          4. 触发目标代理的订阅者回调
-
-        Args:
-            message: 要发送的消息
-
-        Returns:
-            bool: 是否发送成功
-        """
-        if message.to_agent not in self.queues:
-            return False
-
-        # 放入目标代理的队列
-        self.queues[message.to_agent].append(message)
-        # 记录历史
-        self.history.append(message)
-
-        # 触发订阅者回调
-        for callback in self.subscribers.get(message.to_agent, []):
-            callback(message)
-
-        return True
-
-    def broadcast(self, from_agent: str, msg_type: MessageType, content: Any):
-        """
-        广播消息给所有代理（除了发送者）。
-
-        对应 Claude Code 的状态更新通知：
-          - 一个代理完成任务后，通知所有其他代理
-          - 用于同步团队状态
-
-        Args:
-            from_agent: 发送者名称
-            msg_type:   消息类型
-            content:    消息内容
-        """
-        for agent_name in self.queues:
-            if agent_name != from_agent:
-                self.send(Message(
-                    from_agent=from_agent,
-                    to_agent=agent_name,
-                    msg_type=msg_type,
-                    content=content,
-                ))
-
-    def receive(self, agent_name: str) -> Optional[Message]:
-        """
-        从代理的队列中接收消息。
-
-        非阻塞操作：如果队列为空，立即返回 None。
-
-        Args:
-            agent_name: 代理名称
-
-        Returns:
-            Optional[Message]: 消息对象，队列为空则返回 None
-        """
-        if agent_name in self.queues and self.queues[agent_name]:
-            return self.queues[agent_name].popleft()
-        return None
-
-    def subscribe(self, agent_name: str, callback: callable):
-        """
-        订阅代理的消息。
-
-        当代理收到消息时，会调用注册的回调函数。
-        用于实现实时通知机制。
-
-        Args:
-            agent_name: 要订阅的代理名称
-            callback:   回调函数，接收 Message 参数
-        """
-        self.subscribers.setdefault(agent_name, []).append(callback)
-
-    def get_history(self, agent_name: str = None) -> list[Message]:
-        """
-        获取消息历史。
-
-        Args:
-            agent_name: 如果指定，只返回与该代理相关的消息
-
-        Returns:
-            list[Message]: 消息列表
-        """
-        if agent_name:
-            return [
-                m for m in self.history
-                if m.from_agent == agent_name or m.to_agent == agent_name
-            ]
-        return self.history
+    def read_inbox(self, agent: str) -> list[dict]:
+        inbox = MAILBOX_DIR / f"{agent}.jsonl"
+        if not inbox.exists():
+            return []
+        msgs = [json.loads(line) for line in inbox.read_text().splitlines()
+                if line.strip()]
+        inbox.unlink()  # consume: read + delete
+        return msgs
 
 
-# ══════════════════════════════════════════════════════════════
-# 第四部分：协作协议
-# ══════════════════════════════════════════════════════════════
+BUS = MessageBus()
+active_teammates: dict[str, bool] = {}
 
-class CollaborationProtocol:
-    """
-    协作协议：定义代理团队的交互规则。
+# ── Protocol State (s16 new) ──
 
-    提供两种常用协作模式：
-      1. request_response() - 请求-响应模式
-      2. review_cycle()     - 审查循环模式
+@dataclass
+class ProtocolState:
+    request_id: str
+    type: str       # "shutdown" | "plan_approval"
+    sender: str
+    target: str
+    status: str     # pending | approved | rejected
+    payload: str    # plan text or shutdown reason
+    created_at: float = field(default_factory=time.time)
 
-    这些模式在 Claude Code 中的对应：
-      - 请求-响应 → 主代理发送任务给子代理，等待结果
-      - 审查循环  → 编码-审查-修改的迭代过程
-    """
 
-    def __init__(self, bus: MessageBus):
-        """
-        初始化协作协议。
+pending_requests: dict[str, ProtocolState] = {}
 
-        Args:
-            bus: 消息总线实例
-        """
-        self.bus = bus
 
-    def request_response(
-        self,
-        requester: str,
-        responder: str,
-        task: str,
-        timeout: float = 30,
-    ) -> Optional[str]:
-        """
-        请求-响应模式。
+def new_request_id() -> str:
+    return f"req_{random.randint(0, 999999):06d}"
 
-        流程：
-          1. requester 发送 TASK 消息给 responder
-          2. 等待 responder 的响应（RESULT 消息）
-          3. 通过 in_reply_to 关联请求和响应
-          4. 超时返回 None
 
-        Args:
-            requester: 请求方代理名称
-            responder: 响应方代理名称
-            task:      任务描述
-            timeout:   超时时间（秒）
+def match_response(response_type: str, request_id: str, approve: bool):
+    """Correlate a response to the original request via request_id.
+    Validates that response_type matches the request type."""
+    state = pending_requests.get(request_id)
+    if not state:
+        print(f"  \033[31m[protocol] unknown request_id: {request_id}\033[0m")
+        return
+    # Validate response type matches request type
+    if state.type == "shutdown" and response_type != "shutdown_response":
+        print(f"  \033[31m[protocol] type mismatch: expected shutdown_response, "
+              f"got {response_type}\033[0m")
+        return
+    if state.type == "plan_approval" and response_type != "plan_approval_response":
+        print(f"  \033[31m[protocol] type mismatch: expected plan_approval_response, "
+              f"got {response_type}\033[0m")
+        return
+    if state.status != "pending":
+        print(f"  \033[33m[protocol] {request_id} already {state.status}, "
+              f"ignoring duplicate\033[0m")
+        return
+    state.status = "approved" if approve else "rejected"
+    icon = "✓" if approve else "✗"
+    color = "32" if approve else "31"
+    print(f"  \033[{color}m[protocol] {state.type} {icon} "
+          f"({request_id}: {state.status})\033[0m")
 
-        Returns:
-            Optional[str]: 响应内容，超时返回 None
-        """
-        # 创建请求消息
-        request = Message(
-            from_agent=requester,
-            to_agent=responder,
-            msg_type=MessageType.TASK,
-            content=task,
-        )
-        self.bus.send(request)
 
-        # 等待响应
-        start = time.time()
-        while time.time() - start < timeout:
-            response = self.bus.receive(requester)
-            # 检查是否是对应请求的响应
-            if response and response.in_reply_to == request.message_id:
-                return response.content
-            time.sleep(0.1)
+# ── Unified Lead Inbox Consumer (s16 fix) ──
+# Both check_inbox tool and main loop call this function.
+# Protocol responses are routed via match_response before returning.
 
-        return None
+def consume_lead_inbox(route_protocol: bool = True) -> list[dict]:
+    """Read Lead's inbox. Route protocol responses, return all messages.
+    Called by both run_check_inbox() and main loop to avoid
+    messages being consumed without protocol routing."""
+    msgs = BUS.read_inbox("lead")
+    if not msgs:
+        return []
+    if route_protocol:
+        for msg in msgs:
+            meta = msg.get("metadata", {})
+            req_id = meta.get("request_id", "")
+            msg_type = msg.get("type", "")
+            if req_id and msg_type.endswith("_response"):
+                approve = meta.get("approve", False)
+                match_response(msg_type, req_id, approve)
+    return msgs
 
-    def review_cycle(
-        self,
-        author: str,
-        reviewer: str,
-        work: str,
-        max_rounds: int = 3,
-    ) -> tuple[str, list[str]]:
-        """
-        审查循环模式。
 
-        流程：
-          1. 作者提交工作给审查者
-          2. 审查者审查并给出反馈
-          3. 如果有严重问题，作者修改后重新提交
-          4. 重复直到审查通过或达到最大轮次
+# ── Teammate Thread (s16: idle loop + dispatch) ──
 
-        Args:
-            author:     作者代理名称
-            reviewer:   审查者代理名称
-            work:       要审查的工作内容
-            max_rounds: 最大审查轮次
+def spawn_teammate_thread(name: str, role: str, prompt: str) -> str:
+    """Spawn a teammate agent in a background thread.
+    Uses idle loop: after each LLM turn, waits for inbox messages
+    (shutdown_request, new task) instead of exiting."""
+    if name in active_teammates:
+        return f"Teammate '{name}' already exists"
 
-        Returns:
-            tuple[str, list[str]]: (最终工作内容, 反馈历史)
-        """
-        feedback_history = []
-        current_work = work
+    system = (f"You are '{name}', a {role}. "
+              f"Use tools to complete tasks. "
+              f"Check inbox for protocol messages (shutdown_request, etc).")
 
-        for round_num in range(max_rounds):
-            # 发送审查请求
-            review_request = Message(
-                from_agent=author,
-                to_agent=reviewer,
-                msg_type=MessageType.TASK,
-                content=f"审查以下工作:\n{current_work}",
-            )
-            self.bus.send(review_request)
+    def handle_inbox_message(name: str, msg: dict, messages: list) -> bool:
+        """Dispatch incoming protocol messages by type.
+        Returns True if teammate should stop."""
+        msg_type = msg.get("type", "message")
+        meta = msg.get("metadata", {})
+        req_id = meta.get("request_id", "")
 
-            # 模拟审查反馈（实际中由审查者代理生成）
-            feedback = f"审查反馈 (第 {round_num + 1} 轮): 无重大问题"
-            feedback_history.append(feedback)
+        if msg_type == "shutdown_request":
+            BUS.send(name, "lead", "Shutting down gracefully.",
+                     "shutdown_response",
+                     {"request_id": req_id, "approve": True})
+            print(f"  \033[35m[protocol] {name} approved shutdown "
+                  f"({req_id})\033[0m")
+            return True  # stop the loop
 
-            # 如果没有严重问题，结束审查
-            if "无重大问题" in feedback or "CRITICAL" not in feedback:
+        if msg_type == "plan_approval_response":
+            approve = meta.get("approve", False)
+            if approve:
+                messages.append({"role": "user",
+                    "content": f"[Plan approved] Proceed with the task."})
+            else:
+                messages.append({"role": "user",
+                    "content": f"[Plan rejected] Feedback: {msg['content']}"})
+
+        return False  # continue
+
+    def run():
+        messages = [{"role": "user", "content": prompt}]
+        sub_tools = [
+            {"name": "bash", "description": "Run a shell command.",
+             "input_schema": {"type": "object",
+                              "properties": {"command": {"type": "string"}},
+                              "required": ["command"]}},
+            {"name": "read_file", "description": "Read file.",
+             "input_schema": {"type": "object",
+                              "properties": {"path": {"type": "string"}},
+                              "required": ["path"]}},
+            {"name": "write_file", "description": "Write file.",
+             "input_schema": {"type": "object",
+                              "properties": {"path": {"type": "string"},
+                                             "content": {"type": "string"}},
+                              "required": ["path", "content"]}},
+            {"name": "send_message",
+             "description": "Send message to another agent.",
+             "input_schema": {"type": "object",
+                              "properties": {"to": {"type": "string"},
+                                             "content": {"type": "string"}},
+                              "required": ["to", "content"]}},
+            {"name": "submit_plan",
+             "description": "Submit a plan for Lead approval.",
+             "input_schema": {"type": "object",
+                              "properties": {"plan": {"type": "string"}},
+                              "required": ["plan"]}},
+        ]
+        sub_handlers = {
+            "bash": run_bash, "read_file": run_read, "write_file": run_write,
+            "send_message": lambda to, content: (BUS.send(name, to, content),
+                                                  "Sent")[1],
+            "submit_plan": lambda plan: _teammate_submit_plan(name, plan),
+        }
+
+        shutdown_requested = False
+        while not shutdown_requested:
+            # Check inbox for protocol messages
+            inbox = BUS.read_inbox(name)
+            should_stop = False
+            non_protocol = []
+            for msg in inbox:
+                if msg.get("type") in ("shutdown_request", "plan_approval_response"):
+                    should_stop = handle_inbox_message(name, msg, messages)
+                    if should_stop:
+                        break
+                else:
+                    non_protocol.append(msg)
+            if should_stop:
+                shutdown_requested = True
+                break
+            if non_protocol:
+                inbox_json = json.dumps(non_protocol)
+                messages.append({"role": "user",
+                    "content": "<inbox>" + inbox_json + "</inbox>"})
+
+            # LLM turn
+            try:
+                response = client.messages.create(
+                    model=MODEL, system=system, messages=messages[-20:],
+                    tools=sub_tools, max_tokens=8000)
+            except Exception:
                 break
 
-            # 根据反馈修改工作
-            current_work = f"{current_work}\n\n[根据反馈修改: {feedback}]"
+            messages.append({"role": "assistant", "content": response.content})
+            if response.stop_reason != "tool_use":
+                # Idle: wait for inbox messages instead of exiting
+                # Real CC sends idle_notification to Lead here
+                while not shutdown_requested:
+                    time.sleep(1)
+                    inbox = BUS.read_inbox(name)
+                    if not inbox:
+                        continue
+                    for msg in inbox:
+                        if msg.get("type") in ("shutdown_request", "plan_approval_response"):
+                            should_stop = handle_inbox_message(name, msg, messages)
+                            if should_stop:
+                                shutdown_requested = True
+                                break
+                        else:
+                            non_protocol.append(msg)
+                    if shutdown_requested:
+                        break
+                    if non_protocol:
+                        inbox_json = json.dumps(non_protocol)
+                        messages.append({"role": "user",
+                            "content": "<inbox>" + inbox_json + "</inbox>"})
+                        break  # back to LLM turn with new messages
 
-        return current_work, feedback_history
+            # Execute tool calls
+            results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    handler = sub_handlers.get(block.name)
+                    output = handler(**block.input) if handler else "Unknown"
+                    results.append({"type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": str(output)})
+            messages.append({"role": "user", "content": results})
+
+        # Send final summary to Lead
+        summary = "Done."
+        for msg in reversed(messages):
+            if msg["role"] == "assistant" and isinstance(msg["content"], list):
+                for b in msg["content"]:
+                    if getattr(b, "type", None) == "text":
+                        summary = b.text
+                        break
+                else:
+                    continue
+                break
+        BUS.send(name, "lead", summary, "result")
+        active_teammates.pop(name, None)
+        print(f"  \033[32m[teammate] {name} finished\033[0m")
+
+    active_teammates[name] = True
+    threading.Thread(target=run, daemon=True).start()
+    print(f"  \033[36m[teammate] {name} spawned as {role}\033[0m")
+    return f"Teammate '{name}' spawned as {role}"
 
 
-# ══════════════════════════════════════════════════════════════
-# 第五部分：程序入口
-# ══════════════════════════════════════════════════════════════
+def _teammate_submit_plan(from_name: str, plan: str) -> str:
+    """Teammate submits a plan to Lead for approval.
+
+    Note: This is a protocol-level request, not a code-level gate.
+    After submitting, the teammate's thread continues running — it can
+    still call bash/write/etc. Real enforcement relies on the model
+    waiting for the approval response before acting. Code-level tool
+    gating would require blocking the teammate's tool dispatch until
+    approval arrives.
+    """
+    req_id = new_request_id()
+    pending_requests[req_id] = ProtocolState(
+        request_id=req_id, type="plan_approval",
+        sender=from_name, target="lead",
+        status="pending", payload=plan)
+    BUS.send(from_name, "lead", plan,
+             "plan_approval_request",
+             {"request_id": req_id})
+    return f"Plan submitted ({req_id}). Waiting for approval..."
+
+
+# ── Lead Protocol Tools (s16 new) ──
+
+def run_request_shutdown(teammate: str) -> str:
+    req_id = new_request_id()
+    pending_requests[req_id] = ProtocolState(
+        request_id=req_id, type="shutdown",
+        sender="lead", target=teammate,
+        status="pending", payload="")
+    BUS.send("lead", teammate, "Please shut down gracefully.",
+             "shutdown_request",
+             {"request_id": req_id})
+    print(f"  \033[35m[protocol] shutdown_request → {teammate} "
+          f"({req_id})\033[0m")
+    return f"Shutdown request sent to {teammate} (req: {req_id})"
+
+
+def run_request_plan(teammate: str, task: str) -> str:
+    """Lead asks a teammate to submit a plan for a task."""
+    BUS.send("lead", teammate, f"Please submit a plan for: {task}",
+             "message")
+    return f"Asked {teammate} to submit a plan"
+
+
+def run_review_plan(request_id: str, approve: bool, feedback: str = "") -> str:
+    state = pending_requests.get(request_id)
+    if not state:
+        return f"Request {request_id} not found"
+    if state.status != "pending":
+        return f"Request {request_id} already {state.status}"
+    state.status = "approved" if approve else "rejected"
+    BUS.send("lead", state.sender, feedback or ("Approved" if approve else "Rejected"),
+             "plan_approval_response",
+             {"request_id": request_id, "approve": approve})
+    icon = "✓" if approve else "✗"
+    print(f"  \033[32m[protocol] plan {icon} ({request_id})\033[0m")
+    return f"Plan {'approved' if approve else 'rejected'} ({request_id})"
+
+
+# ── Other Lead Tool Handlers ──
+
+def run_spawn_teammate(name: str, role: str, prompt: str) -> str:
+    return spawn_teammate_thread(name, role, prompt)
+
+
+def run_send_message(to: str, content: str) -> str:
+    BUS.send("lead", to, content)
+    return f"Sent to {to}"
+
+
+def run_check_inbox() -> str:
+    """Check Lead's inbox. Routes protocol responses via match_response."""
+    msgs = consume_lead_inbox(route_protocol=True)
+    if not msgs:
+        return "(inbox empty)"
+    lines = []
+    for m in msgs:
+        meta = m.get("metadata", {})
+        req_id = meta.get("request_id", "")
+        tag = f" [{m['type']} req:{req_id}]" if req_id else f" [{m['type']}]"
+        lines.append(f"  [{m['from']}]{tag} {m['content'][:200]}")
+    return "\n".join(lines)
+
+
+# ── Tool Dispatch ──
+
+def execute_tool(block) -> str:
+    """Execute a tool call block, return output."""
+    handler = {
+        "bash": run_bash, "read_file": run_read, "write_file": run_write,
+        "create_task": run_create_task, "list_tasks": run_list_tasks,
+        "get_task": run_get_task, "claim_task": run_claim_task,
+        "complete_task": run_complete_task,
+        "spawn_teammate": run_spawn_teammate,
+        "send_message": run_send_message, "check_inbox": run_check_inbox,
+        "request_shutdown": run_request_shutdown,
+        "request_plan": run_request_plan, "review_plan": run_review_plan,
+    }.get(block.name)
+    if handler:
+        return handler(**block.input)
+    return f"Unknown tool: {block.name}"
+
+
+# ── Tool Definitions ──
+
+TOOLS = [
+    {"name": "bash", "description": "Run a shell command.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "command": {"type": "string"},
+                          "run_in_background": {"type": "boolean"}},
+                      "required": ["command"]}},
+    {"name": "read_file", "description": "Read file contents.",
+     "input_schema": {"type": "object",
+                      "properties": {"path": {"type": "string"},
+                                     "limit": {"type": "integer"}},
+                      "required": ["path"]}},
+    {"name": "write_file", "description": "Write content to a file.",
+     "input_schema": {"type": "object",
+                      "properties": {"path": {"type": "string"},
+                                     "content": {"type": "string"}},
+                      "required": ["path", "content"]}},
+    {"name": "create_task",
+     "description": "Create a new task with optional blockedBy dependencies.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "subject": {"type": "string"},
+                          "description": {"type": "string"},
+                          "blockedBy": {"type": "array",
+                                        "items": {"type": "string"}}},
+                      "required": ["subject"]}},
+    {"name": "list_tasks",
+     "description": "List all tasks with status, owner, and dependencies.",
+     "input_schema": {"type": "object", "properties": {},
+                      "required": []}},
+    {"name": "get_task",
+     "description": "Get full details of a specific task by ID.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+    {"name": "claim_task",
+     "description": "Claim a pending task. Sets owner, changes status to in_progress.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+    {"name": "complete_task",
+     "description": "Complete an in-progress task. Reports unblocked downstream tasks.",
+     "input_schema": {"type": "object",
+                      "properties": {"task_id": {"type": "string"}},
+                      "required": ["task_id"]}},
+    {"name": "spawn_teammate",
+     "description": "Spawn a teammate agent in a background thread.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "name": {"type": "string"},
+                          "role": {"type": "string"},
+                          "prompt": {"type": "string"}},
+                      "required": ["name", "role", "prompt"]}},
+    {"name": "send_message",
+     "description": "Send message to a teammate via MessageBus.",
+     "input_schema": {"type": "object",
+                      "properties": {"to": {"type": "string"},
+                                     "content": {"type": "string"}},
+                      "required": ["to", "content"]}},
+    {"name": "check_inbox",
+     "description": "Check Lead's inbox. Routes protocol responses automatically.",
+     "input_schema": {"type": "object", "properties": {},
+                      "required": []}},
+    {"name": "request_shutdown",
+     "description": "Request a teammate to shut down gracefully.",
+     "input_schema": {"type": "object",
+                      "properties": {"teammate": {"type": "string"}},
+                      "required": ["teammate"]}},
+    {"name": "request_plan",
+     "description": "Ask a teammate to submit a plan for review.",
+     "input_schema": {"type": "object",
+                      "properties": {"teammate": {"type": "string"},
+                                     "task": {"type": "string"}},
+                      "required": ["teammate", "task"]}},
+    {"name": "review_plan",
+     "description": "Approve or reject a submitted plan by request_id.",
+     "input_schema": {"type": "object",
+                      "properties": {
+                          "request_id": {"type": "string"},
+                          "approve": {"type": "boolean"},
+                          "feedback": {"type": "string"}},
+                      "required": ["request_id", "approve"]}},
+]
+
+
+# ── Context ──
+
+def update_context(context: dict, messages: list) -> dict:
+    """Derive context from real state."""
+    memories = ""
+    if MEMORY_INDEX.exists():
+        content = MEMORY_INDEX.read_text().strip()
+        if content:
+            memories = content
+    return {
+        "enabled_tools": [t["name"] for t in TOOLS],
+        "workspace": str(WORKDIR),
+        "memories": memories,
+    }
+
+
+# ── Agent Loop ──
+
+def agent_loop(messages: list, context: dict):
+    system = get_system_prompt(context)
+    while True:
+        try:
+            response = client.messages.create(
+                model=MODEL, system=system, messages=messages,
+                tools=TOOLS, max_tokens=8000)
+        except Exception as e:
+            messages.append({"role": "assistant", "content": [
+                {"type": "text",
+                 "text": f"[Error] {type(e).__name__}: {e}"}]})
+            return
+
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
+            return
+
+        results = []
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+            print(f"\033[36m> {block.name}\033[0m")
+
+            if should_run_background(block.name, block.input):
+                bg_id = start_background_task(block)
+                results.append({"type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": f"[Background task {bg_id} started] "
+                                           f"Result will be available when complete."})
+            else:
+                output = execute_tool(block)
+                print(str(output)[:300])
+                results.append({"type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": output})
+
+        # Merge background tool results + notifications into one user message
+        user_content = list(results)
+        bg_notifications = collect_background_results()
+        if bg_notifications:
+            for notif in bg_notifications:
+                user_content.append({"type": "text", "text": notif})
+        messages.append({"role": "user", "content": user_content})
+        context = update_context(context, messages)
+        system = get_system_prompt(context)
+
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("U16 - Team Protocols 团队协议演示")
-    print("=" * 60)
+    print("s16: team protocols")
+    print("Enter a question, press Enter to send. Type q to quit.\n")
+    history = []
+    context = update_context({}, [])
+    while True:
+        try:
+            query = input("\033[36ms16 >> \033[0m")
+        except (EOFError, KeyboardInterrupt):
+            break
+        if query.strip().lower() in ("q", "exit", ""):
+            break
+        history.append({"role": "user", "content": query})
+        agent_loop(history, context)
+        context = update_context(context, history)
+        for block in history[-1]["content"]:
+            if getattr(block, "type", None) == "text":
+                print(block.text)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                print(block.get("text", ""))
 
-    # 创建消息总线
-    bus = MessageBus()
-
-    # ── 注册代理 ──────────────────────────────────────────
-    print("\n── 注册代理 ──")
-    agents = ["orchestrator", "coder", "reviewer", "tester"]
-    for agent in agents:
-        bus.register_agent(agent)
-        print(f"  已注册: {agent}")
-
-    # ── 消息发送演示 ──────────────────────────────────────
-    print("\n── 消息发送演示 ──")
-
-    # 1. 任务分配：orchestrator → coder
-    bus.send(Message(
-        from_agent="orchestrator",
-        to_agent="coder",
-        msg_type=MessageType.TASK,
-        content="实现用户登录功能",
-    ))
-    print("  orchestrator → coder: 任务分配 (TASK)")
-
-    # 2. 请求审查：coder → reviewer
-    review_msg = Message(
-        from_agent="coder",
-        to_agent="reviewer",
-        msg_type=MessageType.TASK,
-        content="请审查登录功能代码",
-    )
-    bus.send(review_msg)
-    print("  coder → reviewer: 请求审查 (TASK)")
-
-    # 3. 审查反馈：reviewer → coder
-    bus.send(Message(
-        from_agent="reviewer",
-        to_agent="coder",
-        msg_type=MessageType.FEEDBACK,
-        content="代码质量良好，建议添加输入验证",
-        in_reply_to=review_msg.message_id,  # 关联到审查请求
-    ))
-    print("  reviewer → coder: 审查反馈 (FEEDBACK)")
-
-    # 4. 广播状态
-    bus.broadcast("orchestrator", MessageType.STATUS, "项目进度: 60%")
-    print("  orchestrator → all: 广播状态 (STATUS)")
-
-    # ── 接收消息演示 ──────────────────────────────────────
-    print("\n── 接收消息演示 ──")
-
-    # coder 接收消息
-    msg = bus.receive("coder")
-    if msg:
-        print(f"  coder 收到: [{msg.msg_type.value}] {msg.content}")
-
-    # reviewer 接收消息
-    msg = bus.receive("reviewer")
-    if msg:
-        print(f"  reviewer 收到: [{msg.msg_type.value}] {msg.content}")
-
-    # ── 消息历史 ──────────────────────────────────────────
-    print("\n── 消息历史 ──")
-    for msg in bus.history:
-        content_preview = str(msg.content)[:40]
-        print(f"  [{msg.msg_type.value:8s}] {msg.from_agent} → {msg.to_agent}: {content_preview}...")
-
-    # ── 订阅机制演示 ──────────────────────────────────────
-    print("\n── 订阅机制演示 ──")
-
-    received_messages = []
-
-    def on_message(msg: Message):
-        received_messages.append(msg)
-        print(f"  [订阅回调] tester 收到消息: {msg.content}")
-
-    bus.subscribe("tester", on_message)
-
-    # 发送消息给 tester，会触发回调
-    bus.send(Message(
-        from_agent="orchestrator",
-        to_agent="tester",
-        msg_type=MessageType.TASK,
-        content="运行测试套件",
-    ))
-
-    # ── 协作协议演示 ──────────────────────────────────────
-    print("\n── 协作协议演示 ──")
-
-    protocol = CollaborationProtocol(bus)
-
-    print("  请求-响应模式:")
-    print("    result = protocol.request_response(")
-    print('        requester="orchestrator",')
-    print('        responder="coder",')
-    print('        task="实现用户注册功能",')
-    print("        timeout=30")
-    print("    )")
-
-    print("\n  审查循环模式:")
-    print("    work, feedback = protocol.review_cycle(")
-    print('        author="coder",')
-    print('        reviewer="reviewer",')
-    print('        work="def login(): ...",')
-    print("        max_rounds=3")
-    print("    )")
-
-    # ── Claude Code 通信机制说明 ──────────────────────────
-    print("\n── Claude Code 代理通信机制说明 ──")
-    print("""
-    Claude Code 使用 SendMessage 工具实现代理间通信：
-
-    1. 发送消息：
-       SendMessage(
-           to="agent-id",
-           summary="任务分配",
-           message="请实现用户认证功能"
-       )
-
-    2. 消息路由：
-       - 主代理 → 子代理: 任务分配
-       - 子代理 → 主代理: 结果返回（通过通知）
-       - 代理 → 代理: 直接通信（通过 SendMessage）
-
-    3. 异步通信：
-       - 子代理在后台运行
-       - 完成时通过通知机制告知主代理
-       - 主代理可以继续其他工作
-
-    4. 消息过滤：
-       - 使用 agentId 或 name 标识目标
-       - 支持向特定类型的代理发送消息
-    """)
+        # Check inbox → route protocol + inject into history
+        inbox_msgs = consume_lead_inbox(route_protocol=True)
+        if inbox_msgs:
+            inbox_text = "\n".join(
+                f"From {m['from']}: {m['content'][:200]}" for m in inbox_msgs)
+            history.append({"role": "user",
+                            "content": f"[Inbox]\n{inbox_text}"})
+            print(f"\n\033[33m[Inbox: {len(inbox_msgs)} messages injected]\033[0m")
+        print()
