@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>检查点 - LangGraph</title>
+<style>
+  :root {
+    --color-bg: #ffffff;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #555;
+    --color-border: #e2e8f0;
+    --color-code-bg: #1e1e2e;
+    --color-code-text: #cdd6f4;
+    --color-link: #2563eb;
+    --color-link-hover: #1d4ed8;
+    --color-blockquote-bg: #f0f7ff;
+    --color-blockquote-border: #3b82f6;
+    --color-tip-bg: #f0fdf4;
+    --color-tip-border: #22c55e;
+    --color-warning-bg: #fffbeb;
+    --color-warning-border: #f59e0b;
+    --color-info-bg: #eff6ff;
+    --color-info-border: #3b82f6;
+    --color-note-bg: #f5f3ff;
+    --color-note-border: #8b5cf6;
+    --color-table-header: #f8fafc;
+    --color-toc-active: #2563eb;
+    --sidebar-width: 260px;
+    --content-max: 820px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: 16px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--color-text);
+    background: var(--color-bg);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--color-link); text-decoration: none; }
+  a:hover { color: var(--color-link-hover); text-decoration: underline; }
+
+  /* Layout */
+  .page-wrapper {
+    max-width: calc(var(--content-max) + var(--sidebar-width) + 80px);
+    margin: 0 auto;
+    padding: 2rem 2rem 6rem;
+    position: relative;
+  }
+
+  /* Content */
+  .content { max-width: var(--content-max); }
+
+  /* Typography */
+  h1 { font-size: 2.25rem; font-weight: 700; margin-bottom: 0.5rem; line-height: 1.25; letter-spacing: -0.02em; }
+  h2 { font-size: 1.6rem; font-weight: 700; margin-top: 3rem; margin-bottom: 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--color-border); line-height: 1.3; }
+  h3 { font-size: 1.25rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.75rem; line-height: 1.4; }
+  h4 { font-size: 1.05rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.35rem; }
+  strong { font-weight: 600; }
+
+  /* Blockquote / callouts */
+  blockquote {
+    border-left: 4px solid var(--color-blockquote-border);
+    background: var(--color-blockquote-bg);
+    padding: 0.85rem 1.1rem;
+    margin: 1.2rem 0;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.95rem;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  .callout {
+    border-left: 4px solid var(--color-info-border);
+    background: var(--color-info-bg);
+    padding: 0.85rem 1.1rem;
+    margin: 1.2rem 0;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.95rem;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.tip { border-color: var(--color-tip-border); background: var(--color-tip-bg); }
+  .callout.warning { border-color: var(--color-warning-border); background: var(--color-warning-bg); }
+  .callout.info { border-color: var(--color-info-border); background: var(--color-info-bg); }
+  .callout.note { border-color: var(--color-note-border); background: var(--color-note-bg); }
+  .callout-label { font-weight: 600; margin-bottom: 0.25rem; display: block; }
+
+  /* Code */
+  code {
+    font-family: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: #f1f5f9;
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    color: #d63384;
+  }
+  pre {
+    background: var(--color-code-bg);
+    color: var(--color-code-text);
+    padding: 1.2rem 1.4rem;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 1.2rem 0;
+    font-size: 0.88rem;
+    line-height: 1.65;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--color-border);
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+  }
+  th { background: var(--color-table-header); font-weight: 600; }
+  code { word-break: break-word; }
+
+  /* Images */
+  img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+
+  /* TOC sidebar */
+  .toc-sidebar {
+    position: fixed;
+    top: 2rem;
+    right: max(1rem, calc((100vw - var(--content-max) - var(--sidebar-width) - 80px) / 2 + var(--content-max) + 40px));
+    width: var(--sidebar-width);
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    padding: 1rem 0;
+    z-index: 100;
+  }
+  .toc-sidebar h2 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-secondary);
+    margin: 0 0 0.6rem;
+    padding: 0;
+    border: none;
+  }
+  .toc-sidebar ul { list-style: none; padding: 0; margin: 0; }
+  .toc-sidebar li { margin: 0; }
+  .toc-sidebar a {
+    display: block;
+    padding: 0.2rem 0.65rem;
+    color: var(--color-text-secondary);
+    border-left: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    text-decoration: none;
+  }
+  .toc-sidebar a:hover { color: var(--color-text); text-decoration: none; }
+  .toc-sidebar a.active { color: var(--color-toc-active); border-left-color: var(--color-toc-active); font-weight: 600; }
+  .toc-sidebar a.toc-h3 { padding-left: 1.35rem; font-size: 0.78rem; }
+
+  @media (max-width: 1100px) {
+    .toc-sidebar { display: none; }
+    .page-wrapper { padding: 1.5rem 1.2rem 4rem; }
+  }
+  @media (max-width: 640px) {
+    h1 { font-size: 1.65rem; }
+    h2 { font-size: 1.3rem; }
+    pre { padding: 0.9rem; font-size: 0.82rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="toc-sidebar" id="toc-sidebar">
+  <h2>目录</h2>
+  <ul id="toc-list"></ul>
+</nav>
+
+<div class="page-wrapper">
+<div class="content">
+
+<h1>检查点</h1>
+
+<blockquote>
+  <p>LangGraph 检查点在每一步将图状态保存为检查点，实现持久化、人机交互和容错执行。</p>
+</blockquote>
+
+<p>检查点在每个超级步骤保存图状态的快照，组织为<strong>线程</strong>。使用检查点编译图可实现人机交互工作流、时间旅行调试、容错执行和对话记忆。</p>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/-_xGPoyjhyiDWTPJ/oss/images/checkpoints.jpg?fit=max&auto=format&n=-_xGPoyjhyiDWTPJ&q=85&s=966566aaae853ed4d240c2d0d067467c" alt="检查点" width="2316" height="748" />
+
+<div class="callout info">
+  <span class="callout-label">Agent Server 自动处理检查点</span>
+  <p>使用 Agent Server 时，您无需手动实现或配置检查点器。服务器会在后台自动处理所有持久化基础设施。</p>
+</div>
+
+<div class="callout tip">
+  <span class="callout-label">提示</span>
+  <p>使用 LangSmith 追踪检查点状态并调试代理如何跨会话恢复。请参阅追踪快速入门进行设置。</p>
+</div>
+
+<h2 id="why-use-checkpointers">为什么使用检查点</h2>
+
+<p>以下功能需要检查点：</p>
+
+<ul>
+  <li><strong>人机交互</strong>：检查点通过允许人类检查、中断和批准图步骤来促进人机交互工作流。这些工作流需要检查点，因为人必须能够随时查看图的状态，并且图必须能够在人对状态进行任何更新后恢复执行。</li>
+  <li><strong>记忆</strong>：检查点允许交互之间存在"记忆"。在重复的人类交互（如对话）的情况下，任何后续消息都可以发送到该线程，该线程将保留对先前消息的记忆。</li>
+  <li><strong>时间旅行</strong>：检查点允许"时间旅行"，允许用户重放先前的图执行以审查和/或调试特定的图步骤。此外，检查点使得在任意检查点分叉图状态以探索替代轨迹成为可能。</li>
+  <li><strong>容错</strong>：检查点提供容错和错误恢复：如果一个或多个节点在给定的超级步骤失败，您可以从最后成功的步骤重新启动图。</li>
+</ul>
+
+<a id="pending-writes"></a>
+
+<ul>
+  <li><strong>待处理写入</strong>：当图节点在给定超级步骤的执行过程中失败时，LangGraph 会存储在该超级步骤成功完成的任何其他节点的待处理检查点写入。当您从该超级步骤恢复图执行时，您不会重新运行成功的节点。</li>
+</ul>
+
+<h2 id="core-concepts">核心概念</h2>
+
+<h3 id="threads">线程</h3>
+
+<p>线程是分配给检查点保存器保存的每个检查点的唯一 ID 或线程标识符。它包含一系列运行的累积状态。当执行运行时，助手底层图的状态将被持久化到线程中。</p>
+
+<p>当使用检查点器调用图时，您<strong>必须</strong>在配置的 <code>configurable</code> 部分指定 <code>thread_id</code>：</p>
+
+<pre><code>{"configurable": {"thread_id": "1"}}</code></pre>
+
+<p>线程的当前和历史状态可以被检索。要持久化状态，必须在执行运行之前创建线程。LangSmith API 提供了多个端点来创建和管理线程及线程状态。</p>
+
+<p>检查点器使用 <code>thread_id</code> 作为存储和检索检查点的主键。没有它，检查点器无法保存状态或在中断后恢复执行，因为检查点器使用 <code>thread_id</code> 来加载已保存的状态。</p>
+
+<h3 id="checkpoints">检查点</h3>
+
+<p>线程在特定时间点的状态称为检查点。检查点是在每个超级步骤保存的图状态快照，由 <code>StateSnapshot</code> 对象表示。</p>
+
+<h4 id="super-steps">超级步骤</h4>
+
+<p>LangGraph 在每个<strong>超级步骤</strong>边界创建检查点。超级步骤是图的单个"tick"，所有计划在该步骤执行的节点（可能并行）执行。对于像 <code>START -> A -> B -> END</code> 这样的顺序图，输入、节点 A 和节点 B 各有独立的超级步骤 — 在每个之后产生检查点。理解超级步骤边界对于时间旅行很重要，因为您只能从检查点（即超级步骤边界）恢复执行。</p>
+
+<p>除了超级步骤检查点外，LangGraph 还在<strong>节点（任务）级别</strong>持久化写入。当超级步骤内的每个节点完成时，其输出被写入检查点器的 <code>checkpoint_writes</code> 表中，作为链接到进行中检查点的任务条目。这些逐任务写入实现了待处理写入恢复：如果同一超级步骤中的另一个节点失败，成功节点的写入已经是持久的，在恢复时不需要重新运行。完整的状态快照在超级步骤完成后提交。</p>
+
+<p>LangGraph 还持久化超级步骤内单个节点执行的写入。这些写入存储为任务，用于容错：如果同一超级步骤中的另一个节点失败，成功的节点写入在恢复时不需要重新计算。这些任务写入不是完整的 <code>StateSnapshot</code> 检查点，因此时间旅行从超级步骤边界的完整检查点恢复。</p>
+
+<p>检查点被持久化，可用于在稍后恢复线程的状态。</p>
+
+<p>让我们看看当以下列方式调用简单图时保存了哪些检查点：</p>
+
+<pre><code>from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.runnables import RunnableConfig
+from typing import Annotated
+from typing_extensions import TypedDict
+from operator import add
+
+class State(TypedDict):
+    foo: str
+    bar: Annotated[list[str], add]
+
+def node_a(state: State):
+    return {"foo": "a", "bar": ["a"]}
+
+def node_b(state: State):
+    return {"foo": "b", "bar": ["b"]}
+
+
+workflow = StateGraph(State)
+workflow.add_node(node_a)
+workflow.add_node(node_b)
+workflow.add_edge(START, "node_a")
+workflow.add_edge("node_a", "node_b")
+workflow.add_edge("node_b", END)
+
+checkpointer = InMemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)
+
+config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+graph.invoke({"foo": "", "bar":[]}, config)</code></pre>
+
+<p>运行图后，将恰好有 4 个检查点：</p>
+
+<ul>
+  <li>空检查点，<code>START</code> 作为下一个要执行的节点</li>
+  <li>检查点包含用户输入 <code>{'foo': '', 'bar': []}</code>，<code>node_a</code> 作为下一个要执行的节点</li>
+  <li>检查点包含 <code>node_a</code> 的输出 <code>{'foo': 'a', 'bar': ['a']}</code>，<code>node_b</code> 作为下一个要执行的节点</li>
+  <li>检查点包含 <code>node_b</code> 的输出 <code>{'foo': 'b', 'bar': ['a', 'b']}</code>，没有下一个要执行的节点</li>
+</ul>
+
+<p>请注意，<code>bar</code> 通道值包含来自两个节点的输出，因为此示例对 <code>bar</code> 通道有一个 reducer。</p>
+
+<h4 id="checkpoint-namespace">检查点命名空间</h4>
+
+<p>每个检查点都有一个 <code>checkpoint_ns</code>（检查点命名空间）字段，用于标识它属于哪个图或子图：</p>
+
+<ul>
+  <li><strong><code>""</code></strong>（空字符串）：检查点属于父（根）图。</li>
+  <li><strong><code>"node_name:uuid"</code></strong>：检查点属于作为给定节点调用的子图。对于嵌套子图，命名空间用 <code>|</code> 分隔符连接（例如，<code>"outer_node:uuid|inner_node:uuid"</code>）。</li>
+</ul>
+
+<p>您可以通过配置在节点内访问检查点命名空间：</p>
+
+<pre><code>from langchain_core.runnables import RunnableConfig
+
+def my_node(state: State, config: RunnableConfig):
+    checkpoint_ns = config["configurable"]["checkpoint_ns"]
+    # 父图为 ""，子图为 "node_name:uuid"</code></pre>
+
+<h2 id="get-and-update-state">获取和更新状态</h2>
+
+<h3 id="get-state">获取状态</h3>
+
+<p>当与已保存的图状态交互时，您<strong>必须</strong>指定线程标识符。您可以通过调用 <code>graph.get_state(config)</code> 查看图的<em>最新</em>状态。这将返回一个 <code>StateSnapshot</code> 对象，对应于配置中提供的线程 ID 的最新检查点，或线程的检查点 ID 关联的检查点（如果提供了的话）。</p>
+
+<pre><code># 获取最新状态快照
+config = {"configurable": {"thread_id": "1"}}
+graph.get_state(config)
+
+# 获取特定 checkpoint_id 的状态快照
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "1ef663ba-28fe-6528-8002-5a559208592c"}}
+graph.get_state(config)</code></pre>
+
+<p>在此示例中，<code>get_state</code> 的输出如下所示：</p>
+
+<pre><code>StateSnapshot(
+    values={'foo': 'b', 'bar': ['a', 'b']},
+    next=(),
+    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28fe-6528-8002-5a559208592c'}},
+    metadata={'source': 'loop', 'writes': {'node_b': {'foo': 'b', 'bar': ['b']}}, 'step': 2},
+    created_at='2024-08-29T19:19:38.821749+00:00',
+    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f9-6ec4-8001-31981c2c39f8'}}, tasks=()
+)</code></pre>
+
+<h4 id="statesnapshot-fields">StateSnapshot 字段</h4>
+
+<table>
+  <thead>
+    <tr><th>字段</th><th>类型</th><th>描述</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>values</code></td><td><code>dict</code></td><td>此检查点的状态通道值。</td></tr>
+    <tr><td><code>next</code></td><td><code>tuple[str, ...]</code></td><td>下一个要执行的节点名称。<code>()</code> 为空表示图已完成。</td></tr>
+    <tr><td><code>config</code></td><td><code>dict</code></td><td>包含 <code>thread_id</code>、<code>checkpoint_ns</code> 和 <code>checkpoint_id</code>。</td></tr>
+    <tr><td><code>metadata</code></td><td><code>dict</code></td><td>执行元数据。包含 <code>source</code>（<code>"input"</code>、<code>"loop"</code> 或 <code>"update"</code>）、<code>writes</code>（节点输出）和 <code>step</code>（超级步骤计数器）。</td></tr>
+    <tr><td><code>created_at</code></td><td><code>str</code></td><td>此检查点创建时间的 ISO 8601 时间戳。</td></tr>
+    <tr><td><code>parent_config</code></td><td><code>dict | None</code></td><td>上一个检查点的配置。第一个检查点为 <code>None</code>。</td></tr>
+    <tr><td><code>tasks</code></td><td><code>tuple[PregelTask, ...]</code></td><td>此步骤要执行的任务。每个任务有 <code>id</code>、<code>name</code>、<code>error</code>、<code>interrupts</code>，以及可选的 <code>state</code>（子图快照，使用 <code>subgraphs=True</code> 时）。</td></tr>
+  </tbody>
+</table>
+
+<h3 id="get-state-history">获取状态历史</h3>
+
+<p>您可以通过调用 <code>graph.get_state_history(config)</code> 获取给定线程的完整图执行历史。这将返回与配置中提供的线程 ID 关联的 <code>StateSnapshot</code> 对象列表。重要的是，检查点将按时间顺序排列，最新的检查点/<code>StateSnapshot</code> 将是列表中的第一个。</p>
+
+<pre><code>config = {"configurable": {"thread_id": "1"}}
+list(graph.get_state_history(config))</code></pre>
+
+<p>在此示例中，<code>get_state_history</code> 的输出如下所示：</p>
+
+<pre><code>[
+    StateSnapshot(
+        values={'foo': 'b', 'bar': ['a', 'b']},
+        next=(),
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28fe-6528-8002-5a559208592c'}},
+        metadata={'source': 'loop', 'writes': {'node_b': {'foo': 'b', 'bar': ['b']}}, 'step': 2},
+        created_at='2024-08-29T19:19:38.821749+00:00',
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f9-6ec4-8001-31981c2c39f8'}},
+        tasks=(),
+    ),
+    StateSnapshot(
+        values={'foo': 'a', 'bar': ['a']},
+        next=('node_b',),
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f9-6ec4-8001-31981c2c39f8'}},
+        metadata={'source': 'loop', 'writes': {'node_a': {'foo': 'a', 'bar': ['a']}}, 'step': 1},
+        created_at='2024-08-29T19:19:38.819946+00:00',
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f4-6b4a-8000-ca575a13d36a'}},
+        tasks=(PregelTask(id='6fb7314f-f114-5413-a1f3-d37dfe98ff44', name='node_b', error=None, interrupts=()),),
+    ),
+    StateSnapshot(
+        values={'foo': '', 'bar': []},
+        next=('node_a',),
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f4-6b4a-8000-ca575a13d36a'}},
+        metadata={'source': 'loop', 'writes': None, 'step': 0},
+        created_at='2024-08-29T19:19:38.817813+00:00',
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f0-6c66-bfff-6723431e8481'}},
+        tasks=(PregelTask(id='f1b14528-5ee5-579c-949b-23ef9bfbed58', name='node_a', error=None, interrupts=()),),
+    ),
+    StateSnapshot(
+        values={'bar': []},
+        next=('__start__',),
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f0-6c66-bfff-6723431e8481'}},
+        metadata={'source': 'input', 'writes': {'foo': ''}, 'step': -1},
+        created_at='2024-08-29T19:19:38.816205+00:00',
+        parent_config=None,
+        tasks=(PregelTask(id='6d27aa2e-d72b-5504-a36f-8620e54a76dd', name='__start__', error=None, interrupts=()),),
+    )
+]</code></pre>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/-_xGPoyjhyiDWTPJ/oss/images/get_state.jpg?fit=max&auto=format&n=-_xGPoyjhyiDWTPJ&q=85&s=38ffff52be4d8806b287836295a3c058" alt="状态" width="2692" height="1056" />
+
+<h4 id="find-specific-checkpoint">查找特定检查点</h4>
+
+<p>您可以过滤状态历史以查找匹配特定条件的检查点：</p>
+
+<pre><code>history = list(graph.get_state_history(config))
+
+# 查找特定节点执行前的检查点
+before_node_b = next(s for s in history if s.next == ("node_b",))
+
+# 按步骤号查找检查点
+step_2 = next(s for s in history if s.metadata["step"] == 2)
+
+# 查找由 update_state 创建的检查点
+forks = [s for s in history if s.metadata["source"] == "update"]
+
+# 查找发生中断的检查点
+interrupted = next(
+    s for s in history
+    if s.tasks and any(t.interrupts for t in s.tasks)
+)</code></pre>
+
+<h3 id="replay">重放</h3>
+
+<p>重放从先前检查点重新执行步骤。使用先前的 <code>checkpoint_id</code> 调用图以重新运行该检查点之后的节点。检查点之前的节点被跳过（其结果已保存）。检查点之后的节点重新执行，包括任何 LLM 调用、API 请求或中断 — 它们在重放期间总是重新触发。</p>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/dL5Sn6Cmy9pwtY0V/oss/images/re_play.png?fit=max&auto=format&n=dL5Sn6Cmy9pwtY0V&q=85&s=d7b34b85c106e55d181ae1f4afb50251" alt="重放" width="2276" height="986" />
+
+<h3 id="update-state">更新状态</h3>
+
+<p>您可以使用 <code>update_state</code> 编辑图状态。这会创建一个具有更新值的新检查点 — 它不会修改原始检查点。更新被视为与节点更新相同：当定义了 reducer 函数时，值会通过它们传递，因此具有 reducer 的通道会<em>累积</em>值而不是覆盖它们。</p>
+
+<p>您可以选择指定 <code>as_node</code> 来控制更新被视为来自哪个节点，这会影响接下来执行哪个节点。</p>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/-_xGPoyjhyiDWTPJ/oss/images/checkpoints_full_story.jpg?fit=max&auto=format&n=-_xGPoyjhyiDWTPJ&q=85&s=a52016b2c44b57bd395d6e1eac47aa36" alt="更新" width="3705" height="2598" />
+
+<h2 id="durability-modes">持久性模式</h2>
+
+<p>LangGraph 支持三种持久性模式，让您平衡性能和数据一致性。您可以在调用任何图执行方法时指定持久性模式：</p>
+
+<pre><code>graph.stream(
+    {"input": "test"},
+    durability="sync"
+)</code></pre>
+
+<p>持久性模式从低到高依次为：</p>
+
+<ul>
+  <li><code>"exit"</code>：LangGraph 仅在图执行退出时持久化更改 — 无论是正常退出、出错还是由于人机交互中断。这为长时间运行的图提供了最佳性能，但意味着中间状态不会保存，因此您无法从执行过程中的系统故障（如进程崩溃）中恢复。</li>
+  <li><code>"async"</code>：LangGraph 在下一步执行时异步持久化更改。这提供了良好的性能和持久性，但如果进程在执行过程中崩溃，LangGraph 不写入检查点的风险很小。</li>
+  <li><code>"sync"</code>：LangGraph 在下一步开始之前同步持久化更改。这确保 LangGraph 在继续执行之前写入每个检查点，以一些性能开销为代价提供高持久性。</li>
+</ul>
+
+<h2 id="optimize-checkpoint-storage">优化检查点存储</h2>
+
+<p>默认情况下，LangGraph 检查点在每个超级步骤写入每个状态通道的完整值。对于具有大量累积的长时间运行线程 — 例如多轮对话 — 这可能会随着时间的推移产生显著的存储增长。</p>
+
+<p><code>DeltaChannel</code> 仅存储增量差异而非完整累积值，大幅减少追加密集型通道的检查点大小。</p>
+
+<div class="callout warning">
+  <span class="callout-label">警告</span>
+  <p><code>DeltaChannel</code> 需要 <code>langgraph>=1.2</code>，目前处于测试阶段。API 在未来版本中可能会更改。</p>
+</div>
+
+<h2 id="checkpointer-libraries">检查点器库</h2>
+
+<p>在底层，检查点由符合 <code>BaseCheckpointSaver</code> 接口的检查点对象驱动。LangGraph 提供了多种检查点实现，全部通过独立的、可安装的库实现。</p>
+
+<div class="callout note">
+  <span class="callout-label">注意</span>
+  <p>请参阅检查点集成以了解可用的提供者。</p>
+</div>
+
+<ul>
+  <li><code>langgraph-checkpoint</code>：检查点保存器的基础接口（<code>BaseCheckpointSaver</code>）和序列化/反序列化接口（<code>SerializerProtocol</code>）。包括用于实验的内存检查点实现（<code>InMemorySaver</code>）。LangGraph 已包含 <code>langgraph-checkpoint</code>。</li>
+  <li><code>langgraph-checkpoint-sqlite</code>：使用 SQLite 数据库的 LangGraph 检查点实现（<code>SqliteSaver</code> / <code>AsyncSqliteSaver</code>）。适合实验和本地工作流。需要单独安装。</li>
+  <li><code>langgraph-checkpoint-postgres</code>：使用 Postgres 数据库的高级检查点（<code>PostgresSaver</code> / <code>AsyncPostgresSaver</code>），用于 LangSmith。适合在生产中使用。需要单独安装。</li>
+  <li><code>langchain-azure-cosmosdb</code>：使用 Azure Cosmos DB for NoSQL 的 LangGraph 检查点实现（<code>CosmosDBSaverSync</code> / <code>CosmosDBSaver</code>）。适合在 Azure 生产环境中使用。支持同步和异步操作，具有 Microsoft Entra ID 认证。需要单独安装。</li>
+</ul>
+
+<h3 id="checkpointer-interface">检查点器接口</h3>
+
+<p>每个检查点器符合 <code>BaseCheckpointSaver</code> 接口并实现以下方法：</p>
+
+<ul>
+  <li><code>.put</code> - 使用配置和元数据存储检查点。</li>
+  <li><code>.put_writes</code> - 存储链接到检查点的中间写入（即待处理写入）。</li>
+  <li><code>.get_tuple</code> - 使用给定配置（<code>thread_id</code> 和 <code>checkpoint_id</code>）获取检查点元组。用于在 <code>graph.get_state()</code> 中填充 <code>StateSnapshot</code>。</li>
+  <li><code>.list</code> - 列出匹配给定配置和过滤条件的检查点。用于在 <code>graph.get_state_history()</code> 中填充状态历史。</li>
+</ul>
+
+<p>如果检查点器用于异步图执行（即通过 <code>.ainvoke</code>、<code>.astream</code>、<code>.abatch</code> 执行图），将使用上述方法的异步版本（<code>.aput</code>、<code>.aput_writes</code>、<code>.aget_tuple</code>、<code>.alist</code>）。</p>
+
+<div class="callout note">
+  <span class="callout-label">注意</span>
+  <p>要异步运行图，您可以使用 <code>InMemorySaver</code>，或 Sqlite/Postgres 检查点器的异步版本 — <code>AsyncSqliteSaver</code> / <code>AsyncPostgresSaver</code> 检查点器。</p>
+</div>
+
+<h3 id="serializer">序列化器</h3>
+
+<p>当检查点器保存图状态时，它们需要序列化状态中的通道值。这是使用序列化器对象完成的。</p>
+
+<p><code>langgraph_checkpoint</code> 定义了实现序列化器的协议，并提供了默认实现（<code>JsonPlusSerializer</code>），可处理多种类型，包括 LangChain 和 LangGraph 原语、日期时间、枚举等。</p>
+
+<h4 id="serialization-with-pickle">使用 pickle 序列化</h4>
+
+<p>默认序列化器 <code>JsonPlusSerializer</code> 在底层使用 ormsgpack 和 JSON，这不适合所有类型的对象。</p>
+
+<p>如果您想对 msgpack 编码器当前不支持的对象（如 Pandas dataframe）回退到 pickle，可以使用 <code>JsonPlusSerializer</code> 的 <code>pickle_fallback</code> 参数：</p>
+
+<pre><code>from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+# ... 定义图 ...
+graph.compile(
+    checkpointer=InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+)</code></pre>
+
+<h4 id="encryption">加密</h4>
+
+<p>检查点器可以选择性地加密所有持久化状态。要启用此功能，请将 <code>EncryptedSerializer</code> 实例传递给任何 <code>BaseCheckpointSaver</code> 实现的 <code>serde</code> 参数。创建加密序列化器最简单的方法是通过 <code>from_pycryptodome_aes</code>，它从 <code>LANGGRAPH_AES_KEY</code> 环境变量读取 AES 密钥（或接受 <code>key</code> 参数）：</p>
+
+<pre><code>import sqlite3
+
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+serde = EncryptedSerializer.from_pycryptodome_aes()  # 读取 LANGGRAPH_AES_KEY
+checkpointer = SqliteSaver(sqlite3.connect("checkpoint.db"), serde=serde)</code></pre>
+
+<pre><code>from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.postgres import PostgresSaver
+
+serde = EncryptedSerializer.from_pycryptodome_aes()
+checkpointer = PostgresSaver.from_conn_string("postgresql://...", serde=serde)
+checkpointer.setup()</code></pre>
+
+<p>在 LangSmith 上运行时，只要存在 <code>LANGGRAPH_AES_KEY</code>，加密就会自动启用，因此您只需提供环境变量。其他加密方案可以通过实现 <code>CipherProtocol</code> 并将其提供给 <code>EncryptedSerializer</code> 来使用。</p>
+
+<h2 id="build-custom-checkpointer">构建自定义检查点器</h2>
+
+<div class="callout tip">
+  <span class="callout-label">提示</span>
+  <p>在构建时使用一致性测试套件验证您的实现。它涵盖所有五个基础方法和扩展功能，包括增量通道。在发布前在 CI 中运行它。</p>
+</div>
+
+<p>本节介绍从头实现 <code>BaseCheckpointSaver</code> 以用于自定义存储后端。如果您已经有可用的检查点器，只需添加增量通道支持，请跳转到增量通道支持。</p>
+
+<h3 id="overview">概述</h3>
+
+<p>LangGraph 的持久化层建立在两个存储抽象之上：</p>
+
+<ul>
+  <li><strong>检查点表</strong> — 每个超级步骤一行；存储序列化的图状态（<code>channel_values</code>、<code>channel_versions</code>、<code>versions_seen</code>）并链接到其父检查点。</li>
+  <li><strong>写入表</strong> — 超级步骤内每个节点输出一行；存储链接到检查点的 <code>(task_id, channel, value)</code> 元组。</li>
+</ul>
+
+<p>您的检查点器管理这两个表。<code>put</code> 写入检查点行；<code>put_writes</code> 写入节点输出行；<code>get_tuple</code> 将两者读回为 <code>CheckpointTuple</code>。</p>
+
+<h3 id="base-contract">基础契约</h3>
+
+<p>子类化 <code>BaseCheckpointSaver</code> 并实现以下五个方法。所有方法都是必需的 — 缺少基础方法会在运行时引发 <code>NotImplementedError</code>。</p>
+
+<pre><code>from collections.abc import AsyncIterator, Iterator, Sequence
+from typing import Any
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+)
+
+class MyCheckpointer(BaseCheckpointSaver):
+    async def aput(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
+    ) -> RunnableConfig:
+        ...
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: Sequence[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
+    ) -> None:
+        ...
+
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        ...
+
+    async def alist(
+        self,
+        config: RunnableConfig | None,
+        *,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        ...
+        yield  # 使其成为异步生成器
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        ...</code></pre>
+
+<h4 id="put-aput">put / aput</h4>
+
+<p>存储一行检查点。返回带有存储的 <code>checkpoint_id</code> 的更新配置。</p>
+
+<p>关键要求：</p>
+
+<ul>
+  <li>使用 <code>self.serde.dumps_typed(checkpoint)</code> 序列化检查点 — 这处理所有 LangGraph 原生类型，包括增量通道使用的 <code>_DeltaSnapshot</code> blob。</li>
+  <li>完整存储 <code>metadata</code> — 不要剥离未知键。LangGraph 在次要版本中添加新的元数据字段（如增量通道的 <code>counters_since_delta_snapshot</code>）；丢弃它们会静默破坏功能。</li>
+  <li>存储 <code>config["configurable"].get("checkpoint_id")</code> 作为父检查点 ID，以便 <code>get_tuple</code> 可以填充 <code>parent_config</code>。</li>
+</ul>
+
+<pre><code>async def aput(self, config, checkpoint, metadata, new_versions):
+    thread_id = config["configurable"]["thread_id"]
+    checkpoint_ns = config["configurable"]["checkpoint_ns"]
+    checkpoint_id = checkpoint["id"]
+    parent_id = config["configurable"].get("checkpoint_id")
+
+    type_, blob = self.serde.dumps_typed(checkpoint)
+    serialized_metadata = self.serde.dumps_typed(metadata)
+
+    await self.db.execute(
+        "INSERT INTO checkpoints (...) VALUES (...)",
+        thread_id, checkpoint_ns, checkpoint_id, parent_id,
+        type_, blob, *serialized_metadata,
+    )
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+            "checkpoint_ns": checkpoint_ns,
+            "checkpoint_id": checkpoint_id,
+        }
+    }</code></pre>
+
+<h4 id="put-writes-aput-writes">put_writes / aput_writes</h4>
+
+<p>为当前超级步骤中的单个任务存储节点输出行。这些行通过 <code>(thread_id, checkpoint_ns, checkpoint_id)</code> 链接到检查点。</p>
+
+<pre><code>async def aput_writes(self, config, writes, task_id, task_path=""):
+    thread_id = config["configurable"]["thread_id"]
+    checkpoint_ns = config["configurable"]["checkpoint_ns"]
+    checkpoint_id = config["configurable"]["checkpoint_id"]
+
+    rows = []
+    for idx, (channel, value) in enumerate(writes):
+        type_, blob = self.serde.dumps_typed(value)
+        final_idx = WRITES_IDX_MAP.get(channel, idx)
+        rows.append((thread_id, checkpoint_ns, checkpoint_id,
+                      task_id, task_path, final_idx, channel, type_, blob))
+
+    await self.db.executemany("INSERT INTO writes (...) VALUES (...)", rows)</code></pre>
+
+<p>从 <code>langgraph.checkpoint.base</code> 导入 <code>WRITES_IDX_MAP</code>。它将特殊通道（<code>__error__</code>、<code>__interrupt__</code> 等）映射到保留的负索引，以避免与常规写入索引冲突。</p>
+
+<h4 id="get-tuple-aget-tuple">get_tuple / aget_tuple</h4>
+
+<p>检索检查点。配置可能包含：</p>
+
+<ul>
+  <li><strong>无 <code>checkpoint_id</code></strong> — 返回线程 + 命名空间的最新检查点。</li>
+  <li><strong>特定 <code>checkpoint_id</code></strong> — 返回该确切检查点。</li>
+</ul>
+
+<p><strong>两种路径都必须正确工作。</strong>特定 ID 路径用于时间旅行，以及 — 关键地 — 用于每次图调用的增量通道状态重建。损坏的特定 ID 查找会静默破坏增量通道状态。</p>
+
+<pre><code>async def aget_tuple(self, config):
+    thread_id = config["configurable"]["thread_id"]
+    checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    checkpoint_id = config["configurable"].get("checkpoint_id")
+
+    if checkpoint_id:
+        row = await self.db.fetchone(
+            "SELECT * FROM checkpoints "
+            "WHERE thread_id=? AND checkpoint_ns=? AND checkpoint_id=?",
+            thread_id, checkpoint_ns, checkpoint_id,
+        )
+    else:
+        row = await self.db.fetchone(
+            "SELECT * FROM checkpoints "
+            "WHERE thread_id=? AND checkpoint_ns=? "
+            "ORDER BY checkpoint_id DESC LIMIT 1",
+            thread_id, checkpoint_ns,
+        )
+
+    if row is None:
+        return None
+
+    writes = await self.db.fetchall(
+        "SELECT task_id, channel, type, value FROM writes "
+        "WHERE thread_id=? AND checkpoint_ns=? AND checkpoint_id=? "
+        "ORDER BY task_id, idx",
+        thread_id, checkpoint_ns, row["checkpoint_id"],
+    )
+    pending_writes = [
+        (w["task_id"], w["channel"], self.serde.loads_typed((w["type"], w["value"])))
+        for w in writes
+    ]
+
+    checkpoint = self.serde.loads_typed((row["type"], row["blob"]))
+    metadata = self.serde.loads_typed((row["metadata_type"], row["metadata"]))
+
+    parent_config = None
+    if row["parent_checkpoint_id"]:
+        parent_config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": row["parent_checkpoint_id"],
+            }
+        }
+
+    return CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": row["checkpoint_id"],
+            }
+        },
+        checkpoint=checkpoint,
+        metadata=metadata,
+        parent_config=parent_config,
+        pending_writes=pending_writes,
+    )</code></pre>
+
+<div class="callout warning">
+  <span class="callout-label">警告</span>
+  <p><strong>行键/索引设计对特定 ID 查找很重要。</strong>如果您的存储使用时间排序键（例如反转时间戳）且未嵌入 <code>checkpoint_id</code>，则无法通过 ID 直接进行行读取。您必须在行键中编码 <code>checkpoint_id</code>，或构建辅助索引。在每次查找时使用值过滤器的扫描可以工作，但无法扩展。</p>
+</div>
+
+<h4 id="list-alist">list / alist</h4>
+
+<p>返回线程的检查点，最新的在前。遵守 <code>before</code>（仅返回该配置的 <code>checkpoint_id</code> 之前的检查点）和 <code>limit</code>。</p>
+
+<h4 id="delete-thread-adelete-thread">delete_thread / adelete_thread</h4>
+
+<p>删除线程的所有检查点和写入。检查点行和写入行都必须删除。</p>
+
+<h3 id="row-key-index-design">行键/索引设计</h3>
+
+<p>您存储和索引检查点的方式直接影响正确性和性能。</p>
+
+<p><strong>推荐模式（SQL）：</strong></p>
+
+<pre><code>CREATE TABLE checkpoints (
+    thread_id          TEXT NOT NULL,
+    checkpoint_ns      TEXT NOT NULL DEFAULT '',
+    checkpoint_id      TEXT NOT NULL,   -- ULID，按字典序排序，最新的在后
+    parent_checkpoint_id TEXT,
+    type               TEXT,
+    checkpoint         BYTEA,
+    metadata           JSONB,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);
+
+CREATE TABLE writes (
+    thread_id     TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    task_id       TEXT NOT NULL,
+    task_path     TEXT NOT NULL DEFAULT '',
+    idx           INTEGER NOT NULL,
+    channel       TEXT NOT NULL,
+    type          TEXT,
+    value         BYTEA,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx)
+);</code></pre>
+
+<p>因为 <code>checkpoint_id</code> 是 ULID，它按字典序排序 — 较大的值较新。"获取最新"是 <code>ORDER BY checkpoint_id DESC LIMIT 1</code>；"按 ID 获取"是主键上的等值查找。</p>
+
+<p><strong>对于非 SQL 存储：</strong>同样的原则适用。无论您使用什么键方案，通过 <code>(thread_id, checkpoint_ns, checkpoint_id)</code> 进行直接查找必须是 O(1) 或接近 O(1)。避免设计为只能通过扫描线程的所有行来按 ID 查找检查点。</p>
+
+<h3 id="serialization">序列化</h3>
+
+<p>始终使用 <code>self.serde</code>（继承自 <code>BaseCheckpointSaver</code>，默认为 <code>JsonPlusSerializer</code>）来处理检查点、写入和元数据。不要直接对元数据使用 <code>pickle</code> — 它可以工作，但 <code>JsonPlusSerializer</code> 产生人类可读的输出，并且更好地处理版本控制。</p>
+
+<p><code>JsonPlusSerializer</code> 自动处理所有 LangGraph 原生类型：</p>
+
+<ul>
+  <li><code>_DeltaSnapshot</code> — 增量通道使用的哨兵 blob（msgpack ext code 7）</li>
+  <li>Pydantic v2 模型、数据类、numpy 数组、日期时间、枚举等</li>
+</ul>
+
+<p>如果您编写自定义序列化器，请确保它可以往返 <code>langgraph.checkpoint.serde.types</code> 中的 <code>_DeltaSnapshot</code>。</p>
+
+<h3 id="extended-capabilities">扩展功能</h3>
+
+<p>这些方法是可选的，但可以解锁额外的 Agent Server 功能。如果您的存储后端可以高效支持，请实现它们。</p>
+
+<table>
+  <thead>
+    <tr><th>方法</th><th>启用的功能</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>adelete_for_runs</code></td><td>回滚多任务策略</td></tr>
+    <tr><td><code>acopy_thread</code></td><td>高效线程分叉</td></tr>
+    <tr><td><code>aprune</code></td><td>线程历史修剪</td></tr>
+    <tr><td><code>aget_delta_channel_history</code></td><td>高效增量通道状态重建（见下文）</td></tr>
+  </tbody>
+</table>
+
+<p>Agent Server 在启动时自动检测您的检查点器实现了哪些功能，并激活相应的功能。</p>
+
+<h3 id="delta-channel-support">增量通道支持</h3>
+
+<div class="callout info">
+  <span class="callout-label">DeltaChannel 处于测试阶段。</span>
+  <p>API 和磁盘表示在设计稳定之前可能会更改。</p>
+</div>
+
+<p><code>DeltaChannel</code> 是一个 reducer 通道，在检查点 blob 中仅存储一个哨兵（<code>MISSING</code>）而非完整的通道值。状态通过将祖先写入通过 reducer 重放来重建。这使得检查点 blob 对于像 <code>messages</code> 这样随时间累积的通道，每步为 O(1) 而非 O(N)。</p>
+
+<h4 id="what-runtime-needs">运行时需要什么</h4>
+
+<p>当加载其增量通道在 <code>channel_values</code> 中不存在的检查点时，LangGraph 调用 <code>saver.get_delta_channel_history(config=config, channels=[...])</code>。这为每个通道返回：</p>
+
+<ul>
+  <li><strong><code>writes</code></strong> — 祖先链中对该通道的所有写入，从最旧到最近，直到最近的快照。</li>
+  <li><strong><code>seed</code></strong>（可选）— 在具有快照的最近祖先处存储的 <code>_DeltaSnapshot</code> blob；如果遍历到达根节点未找到快照则不存在。</li>
+</ul>
+
+<p>然后运行时调用 <code>channel.from_checkpoint(seed)</code> 和 <code>channel.replay_writes(writes)</code> 来重建实时值。</p>
+
+<h4 id="default-implementation">默认实现</h4>
+
+<p><code>BaseCheckpointSaver</code> 提供了默认的 <code>get_delta_channel_history</code>，可与任何正确的 <code>get_tuple</code> 实现配合使用：</p>
+
+<pre><code># BaseCheckpointSaver 的简化版本
+def get_delta_channel_history(self, *, config, channels):
+    target = self.get_tuple(config)          # 加载头部检查点
+    cursor = target.parent_config            # 从其父节点开始遍历
+    collected = {ch: [] for ch in channels}
+    seed = {}
+    remaining = set(channels)
+
+    while cursor and remaining:
+        tup = self.get_tuple(cursor)         # ← 需要正确的按 ID 查找
+        if tup is None:
+            break
+        for write in reversed(tup.pending_writes or []):
+            if write[1] in remaining:
+                collected[write[1]].append(write)
+        for ch in list(remaining):
+            if ch in tup.checkpoint["channel_values"]:
+                seed[ch] = tup.checkpoint["channel_values"][ch]
+                remaining.discard(ch)
+        cursor = tup.parent_config
+
+    return {
+        ch: {"writes": list(reversed(collected[ch])), **({"seed": seed[ch]} if ch in seed else {})}
+        for ch in channels
+    }</code></pre>
+
+<p><strong>关键依赖：</strong><code>get_tuple(cursor)</code> 始终使用特定的 <code>checkpoint_id</code>（父节点的 ID）调用。如果该查找返回 <code>None</code>，遍历立即停止，每个增量通道重建为空 — 静默，无错误。这就是为什么 <code>get_tuple</code> 中的特定 ID 路径必须正确。</p>
+
+<h4 id="performance-override">性能重写</h4>
+
+<p>默认遍历对每个祖先检查点发出一个 <code>get_tuple</code> 调用。对于具有良好查询支持的后端，重写 <code>get_delta_channel_history</code>（及其异步版本）以在两个查询中检索祖先链和写入：</p>
+
+<pre><code>async def aget_delta_channel_history(self, *, config, channels):
+    if not channels:
+        return {}
+
+    thread_id = config["configurable"]["thread_id"]
+    checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    checkpoint_id = config["configurable"]["checkpoint_id"]
+
+    # 阶段 1：从最新到最旧流式传输祖先，直到每个通道都有种子
+    ancestors = await self.db.fetchall(
+        "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
+        "FROM checkpoints "
+        "WHERE thread_id=? AND checkpoint_ns=? AND checkpoint_id < ? "
+        "ORDER BY checkpoint_id DESC",
+        thread_id, checkpoint_ns, checkpoint_id,
+    )
+
+    chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
+    seed_by_ch: dict[str, Any] = {}
+    remaining = set(channels)
+    cur_id = config["configurable"]["checkpoint_id"]
+
+    for row in ancestors:
+        if not remaining:
+            break
+        parent_id = row["parent_checkpoint_id"]
+        ckpt = self.serde.loads_typed((row["type"], row["checkpoint"]))
+        cv = ckpt.get("channel_values") or {}
+        for ch in list(remaining):
+            chain_by_ch[ch].append(row["checkpoint_id"])
+            if ch in cv:
+                seed_by_ch[ch] = cv[ch]
+                remaining.discard(ch)
+        cur_id = parent_id
+
+    # 阶段 2：在一个查询中获取每个通道祖先链的写入
+    result: dict[str, DeltaChannelHistory] = {}
+    for ch in channels:
+        chain = chain_by_ch[ch]
+        if not chain:
+            entry: DeltaChannelHistory = {"writes": []}
+            if ch in seed_by_ch:
+                entry["seed"] = seed_by_ch[ch]
+            result[ch] = entry
+            continue
+
+        write_rows = await self.db.fetchall(
+            f"SELECT checkpoint_id, task_id, idx, type, value FROM writes "
+            f"WHERE thread_id=? AND checkpoint_ns=? AND channel=? "
+            f"AND checkpoint_id IN ({','.join('?' * len(chain))})"
+            f"ORDER BY checkpoint_id, task_id, idx",
+            thread_id, checkpoint_ns, ch, *chain,
+        )
+        writes_by_cid: dict[str, list[PendingWrite]] = {}
+        for row in write_rows:
+            cid = row["checkpoint_id"]
+            value = self.serde.loads_typed((row["type"], row["value"]))
+            writes_by_cid.setdefault(cid, []).append((row["task_id"], ch, value))
+
+        # chain 是从最新到最旧；从最旧到最新迭代以获得正确的重放顺序
+        collected: list[PendingWrite] = []
+        for cid in reversed(chain):
+            collected.extend(writes_by_cid.get(cid, []))
+
+        entry = {"writes": collected}
+        if ch in seed_by_ch:
+            entry["seed"] = seed_by_ch[ch]
+        result[ch] = entry
+
+    return result</code></pre>
+
+<h4 id="pruning-with-delta-channels">使用增量通道修剪</h4>
+
+<p><code>DeltaChannel</code> 状态不是自包含在单个检查点中 — 它依赖于回溯到最近 <code>_DeltaSnapshot</code> 的祖先写入链。如果您实现 <code>prune</code> 或 <code>delete_for_runs</code>，您不得删除存活检查点的增量通道所依赖的写入行。</p>
+
+<p>安全选项：</p>
+
+<ol>
+  <li><strong>修剪前遍历</strong> — 对于您打算保留的每个检查点，遍历其祖先链并将直到最近 <code>_DeltaSnapshot</code> 的所有写入行标记为不可删除。</li>
+  <li><strong>修剪前强制快照</strong> — 在您保留的检查点上重写 <code>channel_values[ch] = _DeltaSnapshot(reconstructed_value)</code>，然后自由删除祖先。</li>
+  <li><strong>跳过增量通道线程的修剪</strong> — 如果您尚不需要修剪，这是最安全的短期选项。</li>
+</ol>
+
+<h4 id="copy-thread-with-delta-channels">使用增量通道复制线程</h4>
+
+<p>实现 <code>copy_thread</code> 时，复制完整的祖先链 — 而不仅仅是头部检查点。目标线程必须具有回溯到每个增量通道至少一个 <code>_DeltaSnapshot</code> 的写入行，否则这些通道在复制后将重建为空。</p>
+
+<h3 id="testing-with-conformance-suite">使用一致性套件测试</h3>
+
+<p><code>langgraph-checkpoint-conformance</code> 针对完整契约验证您的实现，包括增量通道历史：</p>
+
+<pre><code>pip install langgraph-checkpoint-conformance</code></pre>
+
+<pre><code>import asyncio
+from langgraph.checkpoint.conformance import checkpointer_test, validate
+
+@checkpointer_test(name="MyCheckpointer")
+async def my_checkpointer():
+    async with MyCheckpointer.create() as saver:
+        yield saver
+
+async def main():
+    report = await validate(my_checkpointer)
+    report.print_report()
+    # 如果任何基础功能缺失或损坏，则失败
+    if not report.passed_all_base():
+        raise RuntimeError("检查点器未通过一致性套件")
+
+asyncio.run(main())</code></pre>
+
+<p>该套件自动检测您的检查点器实现了哪些扩展功能（包括 <code>aget_delta_channel_history</code>），并为每个功能运行相关测试。在发布前作为 CI 的一部分运行它。</p>
+
+</div>
+</div>
+
+<script>
+(function() {
+  const headings = document.querySelectorAll('.content h2, .content h3');
+  const tocList = document.getElementById('toc-list');
+  const tocLinks = [];
+
+  headings.forEach(function(h) {
+    if (!h.id) return;
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent;
+    a.className = h.tagName === 'H3' ? 'toc-h3' : '';
+    a.dataset.target = h.id;
+    li.appendChild(a);
+    tocList.appendChild(li);
+    tocLinks.push({ el: h, link: a });
+  });
+
+  function onScroll() {
+    let current = null;
+    const offset = 120;
+    tocLinks.forEach(function(item) {
+      const rect = item.el.getBoundingClientRect();
+      if (rect.top <= offset) {
+        current = item;
+      }
+    });
+    tocLinks.forEach(function(item) {
+      item.link.classList.remove('active');
+    });
+    if (current) {
+      current.link.classList.add('active');
+    }
+  }
+
+  let ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      window.requestAnimationFrame(function() {
+        onScroll();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+  onScroll();
+})();
+</script>
+
+</body>
+</html>

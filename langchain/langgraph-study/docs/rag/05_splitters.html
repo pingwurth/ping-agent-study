@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本分割器 - LangChain 文档</title>
+    <style>
+        :root {
+            --primary: #161F34;
+            --primary-light: #7FC8FF;
+            --primary-dark: #006DDD;
+            --bg-light: #FFFFFF;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a6a;
+            --text-muted: #8888a8;
+            --border-color: #e5e7eb;
+            --code-bg: #f8f9fa;
+            --sidebar-width: 280px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.7;
+            color: var(--text-primary);
+            background: var(--bg-light);
+        }
+        .top-nav {
+            position: fixed; top: 0; left: 0; right: 0; height: 64px;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color); z-index: 100;
+            display: flex; align-items: center; padding: 0 2rem;
+        }
+        .top-nav .logo { font-size: 1.25rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+        .top-nav .breadcrumb { margin-left: 2rem; font-size: 0.875rem; color: var(--text-muted); }
+        .top-nav .breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+        .main-container { display: flex; margin-top: 64px; min-height: calc(100vh - 64px); }
+        .left-sidebar {
+            width: 260px; position: fixed; top: 64px; left: 0; bottom: 0;
+            overflow-y: auto; padding: 1.5rem 1rem; border-right: 1px solid var(--border-color);
+        }
+        .left-sidebar .nav-group { margin-bottom: 1.5rem; }
+        .left-sidebar .nav-group-title {
+            font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; padding-left: 0.75rem;
+        }
+        .left-sidebar .nav-item {
+            display: block; padding: 0.5rem 0.75rem; font-size: 0.875rem;
+            color: var(--text-secondary); text-decoration: none; border-radius: 0.5rem; transition: all 0.15s ease;
+        }
+        .left-sidebar .nav-item:hover { background: rgba(0,109,221,0.05); color: var(--text-primary); }
+        .left-sidebar .nav-item.active { background: rgba(0,109,221,0.1); color: var(--primary-dark); font-weight: 500; }
+        .content {
+            flex: 1; margin-left: 260px; margin-right: var(--sidebar-width);
+            max-width: calc(100% - 260px - var(--sidebar-width)); padding: 2rem 3rem;
+        }
+        .content h1 { font-size: 2.25rem; font-weight: 700; color: var(--primary); margin-bottom: 1rem; line-height: 1.3; }
+        .content .subtitle { font-size: 1.125rem; color: var(--text-secondary); margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+        .content h2 { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin-top: 2.5rem; margin-bottom: 1rem; padding-top: 1rem; }
+        .content h3 { font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin-top: 2rem; margin-bottom: 0.75rem; }
+        .content p { margin-bottom: 1rem; color: var(--text-secondary); }
+        .content a { color: var(--primary-dark); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.15s ease; }
+        .content a:hover { border-bottom-color: var(--primary-dark); }
+        .content ul, .content ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+        .content li { margin-bottom: 0.5rem; color: var(--text-secondary); }
+        .content li strong { color: var(--text-primary); }
+        .code-block {
+            background: var(--code-bg); border: 1px solid var(--border-color);
+            border-radius: 0.75rem; margin: 1.5rem 0; overflow: hidden;
+        }
+        .code-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.75rem 1rem; background: #f1f3f5; border-bottom: 1px solid var(--border-color);
+            font-size: 0.8125rem; color: var(--text-muted);
+        }
+        .code-header .lang { font-weight: 600; color: var(--text-secondary); }
+        .code-block pre { padding: 1rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.6; }
+        .code-block code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; color: var(--text-primary); }
+        .content code {
+            font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+            font-size: 0.875em; background: rgba(0,109,221,0.08); color: #d63384;
+            padding: 0.125rem 0.375rem; border-radius: 0.25rem;
+        }
+        .note, .tip, .warning { padding: 1rem 1.25rem; border-radius: 0.75rem; margin: 1.5rem 0; font-size: 0.9375rem; }
+        .note { background: rgba(0,109,221,0.08); border-left: 4px solid var(--primary-dark); }
+        .note::before { content: "📝 注意"; display: block; font-weight: 600; color: var(--primary-dark); margin-bottom: 0.5rem; }
+        .tip { background: rgba(16,185,129,0.08); border-left: 4px solid #10b981; }
+        .tip::before { content: "💡 提示"; display: block; font-weight: 600; color: #10b981; margin-bottom: 0.5rem; }
+        .warning { background: rgba(245,158,11,0.08); border-left: 4px solid #f59e0b; }
+        .warning::before { content: "⚠️ 警告"; display: block; font-weight: 600; color: #f59e0b; margin-bottom: 0.5rem; }
+        .steps { counter-reset: step-counter; margin: 1.5rem 0; }
+        .step { counter-increment: step-counter; position: relative; padding-left: 3rem; margin-bottom: 1.5rem; }
+        .step::before {
+            content: counter(step-counter); position: absolute; left: 0; top: 0;
+            width: 2rem; height: 2rem; background: var(--primary-dark); color: white;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.875rem; font-weight: 600;
+        }
+        .step h4 { font-size: 1.125rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+        .right-sidebar {
+            width: var(--sidebar-width); position: fixed; top: 64px; right: 0; bottom: 0;
+            overflow-y: auto; padding: 2rem 1.5rem; border-left: 1px solid var(--border-color);
+        }
+        .right-sidebar .toc-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 1rem; }
+        .right-sidebar .toc-list { list-style: none; padding: 0; margin: 0; }
+        .right-sidebar .toc-item { margin-bottom: 0.25rem; }
+        .right-sidebar .toc-link {
+            display: block; padding: 0.375rem 0.75rem; font-size: 0.8125rem;
+            color: var(--text-secondary); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s ease;
+        }
+        .right-sidebar .toc-link:hover { color: var(--text-primary); background: rgba(0,109,221,0.05); }
+        .right-sidebar .toc-link.active { color: var(--primary-dark); border-left-color: var(--primary-dark); background: rgba(0,109,221,0.08); font-weight: 500; }
+        .right-sidebar .toc-link.indent-1 { padding-left: 1.5rem; font-size: 0.75rem; }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        .feature-card { padding: 1.25rem; background: var(--code-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; }
+        .feature-card h4 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+        .feature-card p { font-size: 0.875rem; color: var(--text-secondary); margin: 0; }
+        .flow-diagram { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 2rem 0; flex-wrap: wrap; }
+        .flow-step { padding: 0.75rem 1.25rem; background: white; border: 2px solid var(--primary-dark); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--primary-dark); }
+        .flow-arrow { font-size: 1.25rem; color: var(--text-muted); }
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9375rem; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border: 1px solid var(--border-color); }
+        th { background: var(--code-bg); font-weight: 600; color: var(--text-primary); }
+        td { color: var(--text-secondary); }
+        .footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .footer a {
+            display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem;
+            background: var(--code-bg); border: 1px solid var(--border-color); border-radius: 0.5rem;
+            color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; transition: all 0.15s ease;
+        }
+        .footer a:hover { background: white; border-color: var(--primary-dark); color: var(--primary-dark); }
+        @media (max-width: 1200px) {
+            .right-sidebar { display: none; }
+            .content { margin-right: 0; max-width: calc(100% - 260px); }
+        }
+        @media (max-width: 900px) {
+            .left-sidebar { display: none; }
+            .content { margin-left: 0; max-width: 100%; padding: 1.5rem; }
+        }
+        html { scroll-behavior: smooth; }
+        .highlight { animation: highlight-fade 2s ease; }
+        @keyframes highlight-fade {
+            0% { background: rgba(0,109,221,0.2); }
+            100% { background: transparent; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <a href="#" class="logo">🦜️🔗 LangChain</a>
+        <div class="breadcrumb">
+            <a href="#">文档</a> / <a href="#">Python</a> / 文本分割器
+        </div>
+    </nav>
+    <div class="main-container">
+        <aside class="left-sidebar">
+            <div class="nav-group">
+                <div class="nav-group-title">核心概念</div>
+                <a href="retrieval.html" class="nav-item ">检索 (Retrieval)</a>
+                <a href="evaluate-rag.html" class="nav-item ">评估 RAG 应用</a>
+                <a href="retrievers.html" class="nav-item ">检索器集成</a>
+                <a href="splitters.html" class="nav-item active">文本分割器</a>
+                <a href="embeddings.html" class="nav-item ">嵌入模型</a>
+                <a href="vectorstores.html" class="nav-item ">向量存储</a>
+                <a href="document-loaders.html" class="nav-item ">文档加载器</a>
+            </div>
+        </aside>
+        <main class="content">
+            
+            <h1 id="overview">文本分割器集成</h1>
+            <p class="subtitle">使用 LangChain 与文本分割器集成。</p>
+
+            <div class="code-block">
+                <div class="code-header"><span class="lang">安装</span></div>
+                <pre><code>pip install -U langchain-text-splitters</code></pre>
+            </div>
+
+            <p><strong>文本分割器</strong>将大文档分解为较小的块，以便单独检索并适应模型上下文窗口限制。</p>
+
+            <div class="tip">
+                对于大多数用例，从 <code>RecursiveCharacterTextSplitter</code> 开始。它在保持上下文完整性和管理块大小之间提供了良好的平衡。此默认策略开箱即用，只有在需要为特定应用程序微调性能时才应考虑调整它。
+            </div>
+
+            <h2 id="text-structure">基于文本结构</h2>
+            <p>文本自然组织成层次单元，如段落、句子和单词。我们可以利用这种固有结构来指导分割策略，创建保持自然语言流、保持块内语义连贯性并适应不同文本粒度级别的分割。</p>
+
+            <p>LangChain 的 <code>RecursiveCharacterTextSplitter</code> 实现了这个概念：</p>
+            <ul>
+                <li>尝试保持较大单元（如段落）完整</li>
+                <li>如果单元超过块大小，则移动到下一级别（如句子）</li>
+                <li>必要时继续到单词级别</li>
+            </ul>
+
+            <div class="code-block">
+                <div class="code-header"><span class="lang">Python</span><span>递归字符分割器</span></div>
+                <pre><code>from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=0)
+texts = text_splitter.split_text(document)</code></pre>
+            </div>
+
+            <h2 id="length-based">基于长度</h2>
+            <p>直观的策略是根据文档长度分割文档。这种简单而有效的方法确保每个块不超过指定的大小限制。</p>
+
+            <p>基于长度分割的主要优势：</p>
+            <ul>
+                <li>实现简单直接</li>
+                <li>一致的块大小</li>
+                <li>易于适应不同的模型要求</li>
+            </ul>
+
+            <p>基于长度分割的类型：</p>
+            <ul>
+                <li><strong>基于 Token</strong>：根据 token 数量分割文本，与语言模型配合使用时很有用</li>
+                <li><strong>基于字符</strong>：根据字符数量分割文本，在不同类型的文本中更一致</li>
+            </ul>
+
+            <div class="code-block">
+                <div class="code-header"><span class="lang">Python</span><span>基于 Token 的分割</span></div>
+                <pre><code>from langchain_text_splitters import CharacterTextSplitter
+
+text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
+    encoding_name="cl100k_base", chunk_size=100, chunk_overlap=0
+)
+texts = text_splitter.split_text(document)</code></pre>
+            </div>
+
+            <h2 id="doc-structure">基于文档结构</h2>
+            <p>某些文档具有固有结构，如 HTML、Markdown 或 JSON 文件。在这些情况下，根据文档结构进行分割是有益的，因为它通常自然地将语义相关的文本分组。</p>
+
+            <p>基于结构分割的主要优势：</p>
+            <ul>
+                <li>保留文档的逻辑组织</li>
+                <li>保持每个块内的上下文</li>
+                <li>对于检索或摘要等下游任务更有效</li>
+            </ul>
+
+            <p>基于结构分割的示例：</p>
+            <ul>
+                <li><strong>Markdown</strong>：基于标题分割（如 <code>#</code>、<code>##</code>、<code>###</code>）</li>
+                <li><strong>HTML</strong>：使用标签分割</li>
+                <li><strong>JSON</strong>：按对象或数组元素分割</li>
+                <li><strong>代码</strong>：按函数、类或逻辑块分割</li>
+            </ul>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📝 Markdown 分割器</h4>
+                    <p>基于标题层级分割 Markdown 文档。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🔧 JSON 分割器</h4>
+                    <p>递归分割 JSON 文档。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>💻 代码分割器</h4>
+                    <p>按函数、类等分割代码文件。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🌐 HTML 分割器</h4>
+                    <p>使用 HTML 标签分割网页。</p>
+                </div>
+            </div>
+        
+            <div class="footer">
+                <a href="retrievers.html">← 上一页：检索器</a>
+                <a href="embeddings.html">下一页：嵌入模型 →</a>
+            </div>
+        </main>
+        <aside class="right-sidebar">
+            <div class="toc-title">本页目录</div>
+            <ul class="toc-list">
+                <li class="toc-item"><a href="#overview" class="toc-link">概览</a></li>
+<li class="toc-item"><a href="#text-structure" class="toc-link">基于文本结构</a></li>
+<li class="toc-item"><a href="#length-based" class="toc-link">基于长度</a></li>
+<li class="toc-item"><a href="#doc-structure" class="toc-link">基于文档结构</a></li>
+            </ul>
+        </aside>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tocLinks = document.querySelectorAll('.toc-link');
+            const sections = [];
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    const section = document.getElementById(href.substring(1));
+                    if (section) sections.push({ link, section });
+                }
+            });
+            function updateActiveSection() {
+                const scrollPos = window.scrollY + 100;
+                let currentSection = null;
+                sections.forEach(({ link, section }) => {
+                    if (section.offsetTop <= scrollPos) currentSection = { link, section };
+                });
+                tocLinks.forEach(link => link.classList.remove('active'));
+                if (currentSection) currentSection.link.classList.add('active');
+            }
+            window.addEventListener('scroll', updateActiveSection);
+            updateActiveSection();
+            tocLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const target = document.getElementById(href.substring(1));
+                        if (target) {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            target.classList.add('highlight');
+                            setTimeout(() => target.classList.remove('highlight'), 2000);
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

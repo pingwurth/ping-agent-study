@@ -1,0 +1,36 @@
+# LangGraph 核心包
+langgraph==1.2.11
+langgraph-checkpoint==4.2.0
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.2
+
+# LangChain 核心包
+langchain==1.3.15
+langchain-core==1.5.5
+langchain-openai==1.5.1
+langchain-protocol==0.0.18
+
+# OpenAI SDK
+openai==3.1.0
+
+# 依赖包
+langsmith==0.7.29
+pydantic==2.12.5
+httpx==0.28.1
+requests==2.32.5
+PyYAML==6.0.3
+orjson==3.11.7
+tenacity==9.1.4
+typing-extensions==4.15.0
+
+# 工具依赖
+tiktoken==0.13.0
+jiter==0.16.0
+distro==1.9.0
+
+# 环境和代理
+python-dotenv==1.2.2
+socksio==1.0.0
+
+# Jupyter 支持
+ipython

@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>事件流 - LangGraph</title>
+<style>
+  :root {
+    --color-bg: #ffffff;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #4a4a6a;
+    --color-border: #e2e2ee;
+    --color-accent: #4f46e5;
+    --color-accent-light: #eef2ff;
+    --color-code-bg: #1e1e2e;
+    --color-code-text: #cdd6f4;
+    --color-code-comment: #6c7086;
+    --color-code-keyword: #cba6f7;
+    --color-code-string: #a6e3a1;
+    --color-code-function: #89b4fa;
+    --color-code-number: #fab387;
+    --color-blockquote-bg: #f5f3ff;
+    --color-blockquote-border: #8b5cf6;
+    --color-table-header: #f8f7ff;
+    --color-table-border: #e5e5f0;
+    --color-highlight: rgba(79, 70, 229, 0.08);
+    --toc-width: 260px;
+    --content-max: 780px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 24px;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    line-height: 1.75;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .page-wrapper {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .content-area {
+    flex: 1;
+    min-width: 0;
+    max-width: var(--content-max);
+    padding: 48px 40px 80px 0;
+  }
+
+  /* TOC */
+  .toc-aside {
+    width: var(--toc-width);
+    flex-shrink: 0;
+    padding: 48px 0 80px 24px;
+    position: relative;
+  }
+
+  .toc-nav {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding-right: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .toc-nav::-webkit-scrollbar { width: 4px; }
+  .toc-nav::-webkit-scrollbar-track { background: transparent; }
+  .toc-nav::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+
+  .toc-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .toc-list {
+    list-style: none;
+  }
+
+  .toc-list li {
+    margin: 0;
+  }
+
+  .toc-list a {
+    display: block;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    padding: 4px 0 4px 12px;
+    border-left: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .toc-list a:hover {
+    color: var(--color-accent);
+  }
+
+  .toc-list a.active {
+    color: var(--color-accent);
+    border-left-color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .toc-list a.toc-h3 {
+    padding-left: 28px;
+    font-size: 12.5px;
+  }
+
+  @media (max-width: 1099px) {
+    .toc-aside { display: none; }
+    .content-area { padding: 32px 0 60px; max-width: 100%; }
+    .page-wrapper { padding: 0 16px; }
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .page-subtitle {
+    font-size: 1.1rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border);
+    letter-spacing: -0.01em;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-top: 36px;
+    margin-bottom: 12px;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin-bottom: 16px;
+  }
+
+  a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  strong {
+    font-weight: 700;
+  }
+
+  ul, ol {
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+
+  li {
+    margin-bottom: 6px;
+  }
+
+  li > ul, li > ol {
+    margin-top: 6px;
+    margin-bottom: 0;
+  }
+
+  /* Blockquote / Note */
+  blockquote {
+    background: var(--color-blockquote-bg);
+    border-left: 4px solid var(--color-blockquote-border);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.95rem;
+    color: var(--color-text-secondary);
+  }
+
+  blockquote p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: #f0f0f8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #c7254e;
+  }
+
+  pre {
+    background: var(--color-code-bg);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    line-height: 1.65;
+    font-size: 14px;
+    border: 1px solid #2a2a3e;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    color: var(--color-code-text);
+    font-size: inherit;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.935rem;
+  }
+
+  th {
+    background: var(--color-table-header);
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--color-table-border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-table-border);
+    vertical-align: top;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* HR */
+  hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 40px 0;
+  }
+
+  /* Page header */
+  .page-header {
+    margin-bottom: 12px;
+  }
+
+  .page-header .breadcrumb {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .page-header .breadcrumb a {
+    color: var(--color-text-secondary);
+  }
+
+  .page-header .breadcrumb a:hover {
+    color: var(--color-accent);
+  }
+
+  /* Footer */
+  .page-footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+  }
+
+  .page-footer a {
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+
+  .page-footer p {
+    margin-bottom: 8px;
+  }
+
+  /* Inline list for related */
+  .related-list {
+    list-style: disc;
+    padding-left: 20px;
+  }
+
+  .related-list li {
+    margin-bottom: 8px;
+  }
+
+  /* Architecture diagram */
+  .arch-flow {
+    background: #faf9ff;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    font-size: 0.935rem;
+    line-height: 2;
+  }
+
+  .arch-flow .arrow {
+    color: var(--color-accent);
+    font-weight: 700;
+    margin: 0 6px;
+  }
+
+  .arch-flow .component {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .arch-flow .detail {
+    color: var(--color-text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrapper">
+  <article class="content-area">
+
+    <header class="page-header">
+      <div class="breadcrumb">
+        <a href="https://docs.langchain.com/oss/python/langgraph">LangGraph</a> / 事件流
+      </div>
+      <h1>事件流</h1>
+      <p class="page-subtitle">以类型化投影方式流式传输 LangGraph 运行的消息、状态、子图、输出及扩展。</p>
+    </header>
+
+    <hr>
+
+    <p>事件流是 "大多数 LangGraph 应用代码推荐的进程内流式传输模型"。它返回一个运行流对象，可同时通过多种方式消费。</p>
+
+    <h2 id="quickstart">快速开始</h2>
+
+    <pre><code><span style="color:#6c7086"># 将输入传递给图并获取类型化的运行流</span>
+stream = graph.stream_events({
+    "messages": [{"role": "user", "content": "What is 42 * 17?"}],
+}, version="v3")
+
+<span style="color:#6c7086"># 逐 token 流式输出</span>
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+<span style="color:#6c7086"># 获取最终输出</span>
+final_state = stream.output</code></pre>
+
+    <p>要针对部署在 Agent Server 后面的图进行流式传输，请参阅 <a href="https://docs.langchain.com/langsmith/streaming">LangSmith 流式传输 API</a>。</p>
+
+    <h2 id="how-the-pieces-fit-together">各组件如何协同工作</h2>
+
+    <p>流式传输栈有两个主要层：</p>
+
+    <ol>
+      <li><strong>流式传输（Streaming）</strong>从 Pregel 引擎发出原始图执行事件。</li>
+      <li><strong>事件流（Event Streaming）</strong>对这些事件进行规范化，通过流转换器处理它们，并暴露类型化的投影。</li>
+    </ol>
+
+    <h3 id="architecture-diagram">架构图</h3>
+
+    <div class="arch-flow">
+      <span class="component">Pregel 引擎</span> <span class="arrow">&rarr;</span> <span class="detail">运行图步骤</span><br>
+      <span class="arrow">&darr;</span> 发出 <span class="component">原始 Pregel 事件</span>：<code>updates</code>、<code>values</code>、<code>messages</code>、<code>custom</code>、<code>checkpoints</code>、<code>tasks</code>、<code>debug</code><br>
+      <span class="arrow">&darr;</span> 发送到 <span class="component">事件路由器</span>：将每个事件路由通过转换器管道<br>
+      <span class="arrow">&darr;</span> 级联通过 <span class="component">流转换器</span>：<code>ValuesTransformer</code>、<code>MessagesTransformer</code>、<code>...</code>、<code>自定义转换器</code><br>
+      <span class="arrow">&darr;</span> 产生 <span class="component">事件流</span>：为应用代码提供投影事件
+    </div>
+
+    <p>事件路由器是连接两层的桥梁。它接收规范化的 Pregel 事件，并将每个事件传递通过已注册的流转换器。内置转换器创建标准投影，如 <code>stream.messages</code>、<code>stream.values</code>、<code>stream.subgraphs</code> 和 <code>stream.output</code>。自定义转换器可以在 <code>stream.extensions</code> 下添加应用特定的投影。</p>
+
+    <h2 id="what-event-streaming-provides">事件流提供什么</h2>
+
+    <p>运行流在一个底层事件流之上暴露类型化投影：</p>
+
+    <table>
+      <thead>
+        <tr><th>投影</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>stream</code></td><td>迭代所有协议事件。</td></tr>
+        <tr><td><code>stream.messages</code></td><td>流式传输聊天模型消息和 token 增量。</td></tr>
+        <tr><td><code>stream.values</code></td><td>迭代状态快照并等待最终值。</td></tr>
+        <tr><td><code>stream.output</code></td><td>等待最终输出。</td></tr>
+        <tr><td><code>stream.subgraphs</code></td><td>发现和观察嵌套图执行。</td></tr>
+        <tr><td><code>stream.interrupts</code></td><td>检查人在环中断的有效载荷。</td></tr>
+        <tr><td><code>stream.interrupted</code></td><td>检查运行是否因人工输入而暂停。</td></tr>
+        <tr><td><code>stream.extensions</code></td><td>消费自定义流转换器投影。</td></tr>
+      </tbody>
+    </table>
+
+    <p>多个消费者可以并发读取这些投影。读取 <code>stream.messages</code> 不会消费 <code>stream.values</code>、<code>stream.subgraphs</code> 或 <code>stream.output</code> 所需的事件。</p>
+
+    <p>事件流位于 <a href="https://docs.langchain.com/oss/python/langgraph/streaming">流式传输（streaming）</a>之上一层，后者通过 <code>stream_mode</code> 模式（如 <code>updates</code>、<code>values</code>、<code>messages</code>、<code>custom</code>、<code>checkpoints</code>、<code>tasks</code> 和 <code>debug</code>）暴露原始图执行事件。当你需要对这些模式进行底层访问时使用流式传输；当应用代码受益于类型化投影时使用事件流。</p>
+
+    <h2 id="stream-messages">流式传输消息</h2>
+
+    <p>使用 <code>stream.messages</code> 获取聊天模型输出：</p>
+
+    <pre><code>stream = graph.stream_events(input, version="v3")
+
+for message in stream.messages:
+    <span style="color:#6c7086"># 获取完整文本和用量统计</span>
+    text = str(message.text)
+    usage = message.output.usage_metadata
+
+    print(text)
+    print(usage)</code></pre>
+
+    <p><code>message.text</code> 在同步代码中是可迭代的。迭代它可以逐 token 输出，或调用 <code>str(message.text)</code> 获取完整文本。</p>
+
+    <p><code>message.reasoning</code> 暴露推理增量，<code>message.tool_calls</code> 暴露工具调用参数块。如果你需要文本、推理和工具调用块按到达顺序精确排列，请迭代消息流的原始事件，而不是分别迭代每个投影。</p>
+
+    <h2 id="stream-subgraphs">流式传输子图</h2>
+
+    <p>使用 <code>stream.subgraphs</code> 观察嵌套图的工作，无需解析命名空间字符串：</p>
+
+    <pre><code>stream = graph.stream_events(input, version="v3")
+
+for subgraph in stream.subgraphs:
+    <span style="color:#6c7086"># 获取子图名称和路径</span>
+    print(subgraph.graph_name, subgraph.path)
+
+    for message in subgraph.messages:
+        print(message.text)</code></pre>
+
+    <p><code>subgraph.graph_name</code> 是已编译图或代理的 <code>name</code>。从工具调度的具名代理（例如通过 Deep Agents <code>task</code> 工具调用的 <code>create_agent(name=...)</code>）会以其名称在此处显示，而打开该作用域的 <code>lifecycle</code> 事件会携带一个 <code>cause</code>，链接回发起调度的工具调用。更多信息请参阅 <a href="#lifecycle">生命周期</a>。</p>
+
+    <p>有关产品特定的流，请参阅 <a href="https://docs.langchain.com/oss/python/deepagents/event-streaming">Deep Agents 流式传输</a>了解子代理流，以及 <a href="https://docs.langchain.com/oss/python/langchain/streaming">LangChain 代理流式传输</a>了解工具调用和中间件事件。</p>
+
+    <h2 id="stream-state">流式传输状态</h2>
+
+    <p>使用 <code>stream.values</code> 在每一步之后流式传输完整状态快照：</p>
+
+    <pre><code>stream = graph.stream_events(input, version="v3")
+
+for snapshot in stream.values:
+    print(snapshot)
+
+<span style="color:#6c7086"># 等待最终输出</span>
+final_state = stream.output</code></pre>
+
+    <h2 id="stream-multiple-projections">流式传输多个投影</h2>
+
+    <p>在异步代码中进行并发消费，使用 <code>astream_events</code> 配合 <code>asyncio.gather</code>：</p>
+
+    <pre><code>import asyncio
+
+stream = await graph.astream_events(input, version="v3")
+
+<span style="color:#6c7086"># 并发消费消息和子图</span>
+async def consume_messages():
+    async for message in stream.messages:
+        print(f"[llm] node={message.node}")
+
+async def consume_subgraphs():
+    async for subgraph in stream.subgraphs:
+        print(f"[subgraph] path={subgraph.path}")
+
+await asyncio.gather(consume_messages(), consume_subgraphs())</code></pre>
+
+    <p>在同步代码中，使用 <code>stream.interleave(...)</code> 按严格到达顺序消费多个投影：</p>
+
+    <pre><code>stream = graph.stream_events(input, version="v3")
+
+<span style="color:#6c7086"># 交错消费多个投影</span>
+for name, item in stream.interleave("values", "messages", "subgraphs"):
+    if name == "values":
+        print(f"[state] keys={list(item)}")
+    elif name == "messages":
+        print(f"[llm] node={item.node}")
+    elif name == "subgraphs":
+        print(f"[subgraph] path={item.path}")</code></pre>
+
+    <h2 id="resume-after-an-interrupt">中断后恢复</h2>
+
+    <p>当图因人工输入而暂停时，检查 <code>stream.interrupted</code> 和 <code>stream.interrupts</code>，然后通过再次调用 <code>stream_events(..., version="v3")</code> 并传入 <code>Command</code> 来恢复。</p>
+
+    <p>恢复需要一个编译时带检查点器的图，以及一个携带线程 ID 的配置——请参阅 <a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a>。</p>
+
+    <pre><code>from langgraph.types import Command
+
+stream = graph.stream_events(input, version="v3")
+
+for message in stream.messages:
+    print(message.text)
+
+<span style="color:#6c7086"># 检查是否被中断</span>
+if stream.interrupted:
+    print(stream.interrupts)
+
+<span style="color:#6c7086"># 通过 Command 恢复运行</span>
+stream = graph.stream_events(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    version="v3",
+)
+final_state = stream.output</code></pre>
+
+    <h2 id="stream-all-protocol-events">流式传输所有协议事件</h2>
+
+    <p>当你需要原始协议事件流时，使用运行对象本身：</p>
+
+    <pre><code>stream = graph.stream_events({
+    "messages": [{"role": "user", "content": "What is 42 * 17?"}],
+}, version="v3")
+
+<span style="color:#6c7086"># 迭代所有原始协议事件</span>
+for event in stream:
+    namespace = event["params"]["namespace"]
+    print(namespace, event["method"], event["params"]["data"])</code></pre>
+
+    <p>每个事件都是一个 <code>ProtocolEvent</code> 信封，包装一个通道特定的有效载荷。这与转换器的 <code>process(event)</code> 接收的形状相同。</p>
+
+    <pre><code>class ProtocolEvent(TypedDict):
+    seq: int                    <span style="color:#6c7086"># 在一次运行中严格递增；用于排序</span>
+    method: str                 <span style="color:#6c7086"># 通道名称："messages"、"values"、"updates"、"custom"、"tools"、"lifecycle" 等</span>
+    params: ProtocolEventParams
+
+
+class ProtocolEventParams(TypedDict):
+    namespace: list[str]        <span style="color:#6c7086"># 从根图开始的 "<name>:<runtime_id>" 段路径；[] 表示根</span>
+    timestamp: int              <span style="color:#6c7086"># 墙钟毫秒数；可能漂移，不要依赖它排序</span>
+    data: Any                   <span style="color:#6c7086"># 通道特定的有效载荷；形状取决于 `method`</span></code></pre>
+
+    <p><code>namespace</code> 是从根图到发出事件的作用域的路径。根是空数组 <code>[]</code>。每个子执行添加一个 <code>"name:runtime_id"</code> 段，因此子图内的嵌套工具调用看起来像 <code>["researcher:6f4d", "tools:91ac"]</code>。<code>:</code> 前的名称是稳定的图或节点名称；后缀是每次调用的运行时 ID。当你只关心特定子树时，可以自行按命名空间过滤原始事件——<code>stream.subgraphs</code> 已经为嵌套图执行做了这件事。</p>
+
+    <h2 id="channels-and-event-lifecycle">通道和事件生命周期</h2>
+
+    <p>原始事件在通道上流动。通道名称作为事件的 <code>method</code> 出现；每个通道发出特定形状的事件。</p>
+
+    <table>
+      <thead>
+        <tr><th>通道</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>values</code></td><td>完整的图状态快照。</td></tr>
+        <tr><td><code>updates</code></td><td>每个节点的状态增量。</td></tr>
+        <tr><td><code>messages</code></td><td>以内容块为中心的聊天模型输出。</td></tr>
+        <tr><td><code>tools</code></td><td>工具调用开始、流式输出、完成和错误事件。</td></tr>
+        <tr><td><code>lifecycle</code></td><td>运行、子图和子代理状态变更。</td></tr>
+        <tr><td><code>checkpoints</code></td><td>用于分支和时间旅行的轻量级检查点信封。</td></tr>
+        <tr><td><code>input</code></td><td>人在环输入请求和响应。</td></tr>
+        <tr><td><code>tasks</code></td><td>Pregel 任务创建和结果事件。</td></tr>
+        <tr><td><code>custom</code></td><td>来自图代码的用户定义有效载荷。</td></tr>
+        <tr><td><code>custom:&lt;name&gt;</code></td><td>应用定义的流转换器输出。</td></tr>
+      </tbody>
+    </table>
+
+    <p>类型化投影（<code>stream.messages</code>、<code>stream.values</code> 等）由这些通道构建。当直接迭代运行对象时，通道名称出现在原始事件的 <code>method</code> 字段上。</p>
+
+    <h3 id="messages">消息通道</h3>
+
+    <p><code>messages</code> 通道将输出建模为内容块。数据的 <code>event</code> 字段为以下之一：</p>
+
+    <ul>
+      <li><code>message-start</code></li>
+      <li><code>content-block-start</code></li>
+      <li><code>content-block-delta</code></li>
+      <li><code>content-block-finish</code></li>
+      <li><code>message-finish</code></li>
+    </ul>
+
+    <p>内容块有明确的边界：一个块开始、发出零个或多个增量，并在同一消息中的下一个块开始之前完成。这使得 token 流式传输、推理块、工具调用块和多模态内容无需特定于供应商的格式即可明确。<code>message-finish</code> 可能包含 token 用量；不可恢复的模型调用失败作为消息错误事件到达。</p>
+
+    <p>要直接消费原始内容块事件，而不是使用 <code>stream.messages</code> 投影：</p>
+
+    <pre><code>for event in stream:
+    if event["method"] != "messages":
+        continue
+
+    data = event["params"]["data"][0]
+    if not isinstance(data, dict):
+        continue
+    if data.get("event") != "content-block-delta":
+        continue
+
+    block = data.get("delta") or {}
+    if block.get("type") == "text-delta":
+        print(block.get("text", ""), end="", flush=True)
+    elif block.get("type") == "reasoning-delta":
+        <span style="color:#6c7086"># 输出推理（思考）增量</span>
+        print(f"[thinking]{block.get('reasoning', '')}", end="", flush=True)</code></pre>
+
+    <h3 id="tools">工具通道</h3>
+
+    <p><code>tools</code> 通道暴露工具执行。数据的 <code>event</code> 字段为以下之一：</p>
+
+    <ul>
+      <li><code>tool-started</code></li>
+      <li><code>tool-output-delta</code></li>
+      <li><code>tool-finished</code></li>
+      <li><code>tool-error</code></li>
+    </ul>
+
+    <p>工具事件通过工具调用 ID 关联，因此工具执行可以关联回其在 <code>messages</code> 通道上发起的内容块。</p>
+
+    <h3 id="lifecycle">生命周期通道</h3>
+
+    <p><code>lifecycle</code> 通道跟踪根运行、子图和子代理的状态。数据的 <code>event</code> 字段为以下之一：</p>
+
+    <ul>
+      <li><code>started</code></li>
+      <li><code>running</code></li>
+      <li><code>completed</code></li>
+      <li><code>failed</code></li>
+      <li><code>interrupted</code></li>
+    </ul>
+
+    <p>除了 <code>event</code> 之外，生命周期数据可能包含可选的 <code>graph_name</code>、<code>error</code> 和 <code>cause</code>，描述子作用域启动的原因（父工具调用、扇出发送、边转换）。</p>
+
+    <h2 id="build-your-own-projection">构建你自己的投影</h2>
+
+    <p>流转换器是事件流中的投影层。它们观察协议事件，维护自己的状态，并暴露运行的派生视图——如工具活动、token 总数、进度事件、工件，或用于另一个协议的消息。<code>StreamChannel</code> 是转换器用来发布这些视图的投影原语。</p>
+
+    <p>内置投影（<code>stream.messages</code>、<code>stream.values</code>、<code>stream.subgraphs</code>、<code>stream.output</code>）和产品特定的投影（LangChain 的 <code>stream.tool_calls</code>、Deep Agents 的 <code>stream.subagents</code>）本身就是使用此相同契约的转换器。用户转换器通过编译时或调用时注册堆叠在其上，其投影出现在 <code>stream.extensions</code> 下。</p>
+
+    <p>当现有投影不匹配应用所需的形状时，请编写一个。</p>
+
+    <h3 id="how-transformers-work">转换器如何工作</h3>
+
+    <p>事件流从 LangGraph Pregel 引擎的流式输出开始。运行时将这些块规范化为协议事件，然后流处理器将每个事件路由通过流转换器栈。</p>
+
+    <p><strong>流程图：</strong></p>
+    <pre><code><span style="color:#89b4fa">Pregel 模式</span> <span style="color:#a6e3a1">&rarr;</span> <span style="color:#89b4fa">事件</span> <span style="color:#a6e3a1">&rarr;</span> <span style="color:#89b4fa">内置投影</span> <span style="color:#a6e3a1">&rarr;</span> <span style="color:#89b4fa">用户转换器</span> <span style="color:#a6e3a1">&rarr;</span> <span style="color:#89b4fa">运行投影</span></code></pre>
+
+    <p>流处理器是单个流的中央调度器。对于每个协议事件，它：</p>
+
+    <ol>
+      <li>按顺序调用每个已注册转换器的 <code>process(event)</code> 钩子。</li>
+      <li>将命名的 <code>StreamChannel</code> 推送回协议事件流。</li>
+      <li>将事件存储在运行流中，除非转换器抑制了它。</li>
+      <li>在运行结束时对每个转换器调用 <code>finalize()</code> 或 <code>fail()</code>。</li>
+    </ol>
+
+    <p>转换器是观察性的。它们不会回调图运行时。相反，它们消费事件并将派生值推送到 <code>StreamChannel</code>、Promise 或其他投影对象中。</p>
+
+    <h3 id="transformer-shape">转换器形状</h3>
+
+    <p>转换器实现 <code>StreamTransformer</code> 接口：</p>
+
+    <pre><code>from langgraph.stream import ProtocolEvent, StreamTransformer
+
+
+class MyTransformer(StreamTransformer):
+    def init(self) -> dict:
+        <span style="color:#6c7086"># 创建投影对象，出现在 stream.extensions 下</span>
+        ...
+
+    def process(self, event: ProtocolEvent) -> bool:
+        <span style="color:#6c7086"># 观察每个协议事件</span>
+        <span style="color:#6c7086"># 仅在你有意要抑制原始事件时返回 False</span>
+        ...
+
+    def finalize(self) -> None:
+        <span style="color:#6c7086"># 在成功的流之后关闭或解析非通道投影</span>
+        ...
+
+    def fail(self, err: BaseException) -> None:
+        <span style="color:#6c7086"># 将错误传播到非通道投影</span>
+        ...</code></pre>
+
+    <ul>
+      <li><code>init()</code> 创建投影对象。用户转换器投影出现在 <code>stream.extensions</code> 下。</li>
+      <li><code>process()</code> 观察每个协议事件。有关 <code>ProtocolEvent</code> 的形状，请参阅 <a href="#stream-all-protocol-events">流式传输所有协议事件</a>。仅在你有意要抑制原始事件时返回 <code>false</code>。</li>
+      <li><code>finalize()</code> 在成功的流之后关闭或解析非通道投影。</li>
+      <li><code>fail()</code> 将错误传播到非通道投影。</li>
+    </ul>
+
+    <h3 id="declaring-required-stream-modes">声明所需的流模式</h3>
+
+    <p><code>required_stream_modes</code> 控制底层图在流期间发出哪些 Pregel 流模式。运行时取每个已注册转换器的 <code>required_stream_modes</code> 的并集，并将该并集作为 <code>stream_mode</code> 参数传递给图的 <code>.stream()</code> 调用。"没有转换器请求的模式永远不会被发出"——声明 <code>("custom",)</code> 正是导致 <code>custom</code> 事件在运行中流动的原因。</p>
+
+    <pre><code>class CustomTransformer(StreamTransformer):
+    required_stream_modes = ("custom",)  <span style="color:#6c7086"># [!code highlight]</span>
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] == "custom":
+            ...
+        return True</code></pre>
+
+    <p><code>process()</code> 接收图发出的每个事件，并负责按 <code>event["method"]</code> 进行过滤。该声明开启了上游发出；它不会缩小 <code>process()</code> 看到的范围。有效值是 Pregel 流模式：<code>"messages"</code>、<code>"tools"</code>、<code>"custom"</code>、<code>"values"</code>、<code>"updates"</code>、<code>"checkpoints"</code>、<code>"tasks"</code>、<code>"debug"</code>。每个转换器必须声明它作用于的每个模式——省略的模式不会被图发出，也永远不会到达 <code>process()</code>。</p>
+
+    <h3 id="stream-channel">StreamChannel</h3>
+
+    <p><code>StreamChannel</code> 是转换器用于流式传输值的投影原语。它总是在 <code>stream.extensions.&lt;name&gt;</code> 上暴露一个可迭代的流。构造函数参数决定每个 <code>push()</code> 是否也会作为 <code>custom:&lt;name&gt;</code> 事件流入运行的主流——即投影的值在迭代原始协议事件时是否可见。</p>
+
+    <table>
+      <thead>
+        <tr><th>需求</th><th>使用方式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>仅侧通道投影</td><td><code>StreamChannel()</code></td></tr>
+        <tr><td>同时将每次推送流入主事件流</td><td><code>StreamChannel(name)</code></td></tr>
+      </tbody>
+    </table>
+
+    <p>命名通道的有效载荷必须是可序列化的，因为每个推送的值也会成为主流中的 <code>custom:&lt;name&gt;</code> 协议事件。将 Promise、异步可迭代对象、类实例和其他进程内句柄保留在未命名通道中。</p>
+
+    <p>流处理器拥有通道的生命周期。一旦 <code>init()</code> 返回通道，处理器会在运行结束时为你关闭或失败它。转换器只推送值。</p>
+
+    <h3 id="example-named-channel">示例：命名通道</h3>
+
+    <p>向 <code>StreamChannel</code> 传递一个字符串名称，以通过 <code>stream.extensions</code> 暴露流式投影，并将每次推送的值作为 <code>custom:&lt;name&gt;</code> 协议事件转发到运行的主事件流：</p>
+
+    <pre><code>from typing import TypedDict
+
+from langgraph.stream import ProtocolEvent, StreamChannel, StreamTransformer
+
+
+<span style="color:#6c7086"># 定义工具活动的数据结构</span>
+class ToolActivity(TypedDict):
+    name: str
+    status: str
+
+
+class ToolActivityTransformer(StreamTransformer):
+    required_stream_modes = ("tools",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self.activity = StreamChannel[ToolActivity]("tool_activity")
+
+    def init(self) -> dict:
+        return {"tool_activity": self.activity}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "tools":
+            return True
+
+        data = event["params"]["data"]
+        if isinstance(data, dict) and data.get("tool_name") and data.get("event"):
+            status = "error" if data["event"] == "tool-error" else "started"
+            self.activity.push({"name": data["tool_name"], "status": status})
+        return True</code></pre>
+
+    <h3 id="example-unnamed-channel">示例：未命名通道</h3>
+
+    <p>没有名称时，通道仅作为侧通道投影——可通过 <code>stream.extensions</code> 访问，但对迭代原始事件的消费者不可见。这对于持有进程内句柄（Promise、异步可迭代对象、类实例）的投影是正确的选择，这些句柄无法序列化到主事件流上。</p>
+
+    <p>下面的示例将未命名通道与 <code>get_stream_writer</code> 配对，后者允许图节点发出 <code>custom</code> 通道事件，转换器将这些事件排入投影：</p>
+
+    <pre><code>from langgraph.config import get_stream_writer
+from langgraph.stream import ProtocolEvent, StreamChannel, StreamTransformer
+
+
+<span style="color:#6c7086"># 图节点通过 get_stream_writer 发出自定义事件</span>
+def node(state):
+    writer = get_stream_writer()
+    writer({"kind": "progress", "message": "retrieving context"})
+    return state
+
+
+class CustomTransformer(StreamTransformer):
+    required_stream_modes = ("custom",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self.log = StreamChannel()
+
+    def init(self) -> dict:
+        return {"custom": self.log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] == "custom":
+            self.log.push(event["params"]["data"])
+        return True
+
+
+<span style="color:#6c7086"># 注册自定义转换器并消费扩展投影</span>
+stream = graph.stream_events(input, version="v3", transformers=[CustomTransformer])
+
+for item in stream.extensions["custom"]:
+    print(item)</code></pre>
+
+    <h3 id="example-final-value-projection">示例：最终值投影</h3>
+
+    <p>当投影不应流入主事件流时，使用未命名流、Promise 或其他进程内对象：</p>
+
+    <pre><code>from langgraph.stream import ProtocolEvent, StreamChannel, StreamTransformer
+
+
+<span style="color:#6c7086"># 统计转换器：累计 token 用量并在流结束时输出总数</span>
+class StatsTransformer(StreamTransformer):
+    required_stream_modes = ("messages",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self.total_tokens = 0
+        self.total_tokens_log = StreamChannel[int]()
+
+    def init(self) -> dict:
+        return {"total_tokens": self.total_tokens_log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        data = event["params"]["data"]
+        if isinstance(data, dict):
+            usage = data.get("usage") or {}
+            self.total_tokens += usage.get("output_tokens") or 0
+        return True
+
+    def finalize(self) -> None:
+        <span style="color:#6c7086"># 流成功结束后推送最终值并关闭通道</span>
+        self.total_tokens_log.push(self.total_tokens)
+        self.total_tokens_log.close()</code></pre>
+
+    <h3 id="register-at-call-time-or-compile-time">在调用时或编译时注册</h3>
+
+    <p>在调用时传递转换器，用于本地实验：</p>
+
+    <pre><code><span style="color:#6c7086"># 调用时注册——适合实验和调试</span>
+stream = graph.stream_events(
+    input,
+    version="v3",
+    transformers=[StatsTransformer, ToolActivityTransformer],
+)</code></pre>
+
+    <p>在图的每次运行都应产生该投影时，将转换器编译到图中：</p>
+
+    <pre><code><span style="color:#6c7086"># 编译时注册——每次运行都会包含这些投影</span>
+graph = builder.compile(
+    transformers=[StatsTransformer, ToolActivityTransformer],
+)</code></pre>
+
+    <h3 id="builtin-tool-call-transformer">内置：ToolCallTransformer</h3>
+
+    <p>LangGraph 附带 <code>ToolCallTransformer</code> 作为内置组件。注册它以在普通 <code>StateGraph</code> 上暴露 <code>stream.tool_calls</code>：</p>
+
+    <pre><code>from langgraph.prebuilt import ToolCallTransformer
+
+<span style="color:#6c7086"># 注册内置的工具调用转换器</span>
+stream = graph.stream_events(input, version="v3", transformers=[ToolCallTransformer])
+
+for tool_call in stream.tool_calls:
+    print(tool_call.tool_name, tool_call.input)</code></pre>
+
+    <h2 id="related">相关文档</h2>
+
+    <p>LangGraph 定义了流式传输原语。要将流式传输与 LangChain 或 Deep Agents 配合使用，请查阅相关产品文档：</p>
+
+    <ul class="related-list">
+      <li><a href="https://docs.langchain.com/oss/python/langchain/event-streaming">LangChain 代理流式传输</a> —— 涵盖 ReAct 风格的代理消息、工具调用和中间件更新。</li>
+      <li><a href="https://docs.langchain.com/oss/python/deepagents/event-streaming">Deep Agents 流式传输</a> —— 涵盖子代理、嵌套消息和子代理工具调用。</li>
+      <li><a href="https://docs.langchain.com/oss/python/langchain/frontend/overview">LangChain 前端模式</a> 和 <a href="https://docs.langchain.com/oss/python/langgraph/frontend/overview">LangGraph 前端模式</a> —— 展示基于流式状态构建的 UI 用例。</li>
+      <li><a href="https://docs.langchain.com/langsmith/streaming">LangSmith 流式传输 API</a> —— 涵盖针对部署在 Agent Server 后面的图进行流式传输。</li>
+    </ul>
+
+    <p>线路级事件和命令格式在 <a href="https://github.com/langchain-ai/agent-protocol">Agent Protocol</a> 仓库中定义，可在 PyPI 上以 <a href="https://pypi.org/project/langchain-protocol/"><code>langchain-protocol</code></a> 和在 npm 上以 <a href="https://www.npmjs.com/package/@langchain/protocol"><code>@langchain/protocol</code></a> 获取。</p>
+
+    <hr>
+
+    <footer class="page-footer">
+      <p><strong>连接这些文档</strong> — <a href="https://docs.langchain.com/use-these-docs">连接这些文档</a>到 Claude、VSCode 等，通过 MCP 获取实时答案。</p>
+      <p><strong>在 GitHub 上编辑此页</strong> — <a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/event-streaming.mdx">在 GitHub 上编辑此页</a>或 <a href="https://github.com/langchain-ai/docs/issues/new/choose">提交问题</a>。</p>
+    </footer>
+
+  </article>
+
+  <aside class="toc-aside">
+    <nav class="toc-nav" aria-label="目录">
+      <div class="toc-title">目录</div>
+      <ul class="toc-list" id="toc-list">
+        <li><a href="#quickstart">快速开始</a></li>
+        <li><a href="#how-the-pieces-fit-together">各组件如何协同工作</a></li>
+        <li><a href="#architecture-diagram" class="toc-h3">架构图</a></li>
+        <li><a href="#what-event-streaming-provides">事件流提供什么</a></li>
+        <li><a href="#stream-messages">流式传输消息</a></li>
+        <li><a href="#stream-subgraphs">流式传输子图</a></li>
+        <li><a href="#stream-state">流式传输状态</a></li>
+        <li><a href="#stream-multiple-projections">流式传输多个投影</a></li>
+        <li><a href="#resume-after-an-interrupt">中断后恢复</a></li>
+        <li><a href="#stream-all-protocol-events">流式传输所有协议事件</a></li>
+        <li><a href="#channels-and-event-lifecycle">通道和事件生命周期</a></li>
+        <li><a href="#messages" class="toc-h3">消息通道</a></li>
+        <li><a href="#tools" class="toc-h3">工具通道</a></li>
+        <li><a href="#lifecycle" class="toc-h3">生命周期通道</a></li>
+        <li><a href="#build-your-own-projection">构建你自己的投影</a></li>
+        <li><a href="#how-transformers-work" class="toc-h3">转换器如何工作</a></li>
+        <li><a href="#transformer-shape" class="toc-h3">转换器形状</a></li>
+        <li><a href="#declaring-required-stream-modes" class="toc-h3">声明所需的流模式</a></li>
+        <li><a href="#stream-channel" class="toc-h3">StreamChannel</a></li>
+        <li><a href="#example-named-channel" class="toc-h3">示例：命名通道</a></li>
+        <li><a href="#example-unnamed-channel" class="toc-h3">示例：未命名通道</a></li>
+        <li><a href="#example-final-value-projection" class="toc-h3">示例：最终值投影</a></li>
+        <li><a href="#register-at-call-time-or-compile-time" class="toc-h3">在调用时或编译时注册</a></li>
+        <li><a href="#builtin-tool-call-transformer" class="toc-h3">内置：ToolCallTransformer</a></li>
+        <li><a href="#related">相关文档</a></li>
+      </ul>
+    </nav>
+  </aside>
+</div>
+
+<script>
+(function() {
+  var tocLinks = document.querySelectorAll('#toc-list a');
+  var headingIds = [];
+  for (var i = 0; i < tocLinks.length; i++) {
+    headingIds.push(tocLinks[i].getAttribute('href').slice(1));
+  }
+
+  function onScroll() {
+    var scrollPos = window.scrollY || document.documentElement.scrollTop;
+    var current = headingIds[0];
+
+    for (var i = 0; i < headingIds.length; i++) {
+      var el = document.getElementById(headingIds[i]);
+      if (el) {
+        var rect = el.getBoundingClientRect();
+        var top = rect.top + scrollPos;
+        if (scrollPos >= top - 80) {
+          current = headingIds[i];
+        }
+      }
+    }
+
+    for (var j = 0; j < tocLinks.length; j++) {
+      var href = tocLinks[j].getAttribute('href');
+      if (href === '#' + current) {
+        tocLinks[j].classList.add('active');
+      } else {
+        tocLinks[j].classList.remove('active');
+      }
+    }
+  }
+
+  var ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      window.requestAnimationFrame(function() {
+        onScroll();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+
+  onScroll();
+})();
+</script>
+
+</body>
+</html>

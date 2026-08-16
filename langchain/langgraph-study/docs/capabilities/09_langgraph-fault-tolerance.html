@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>容错 - LangGraph</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f8f9fb;
+    --text: #1a1a2e;
+    --text-secondary: #555770;
+    --border: #e2e4ea;
+    --accent: #5b4fe9;
+    --accent-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --inline-code-bg: #f0eef9;
+    --inline-code-text: #5b4fe9;
+    --link: #4338ca;
+    --sidebar-width: 260px;
+    --content-max: 780px;
+    --warning-bg: #fef3cd;
+    --warning-border: #ffc107;
+    --note-bg: #e8f0fe;
+    --note-border: #4285f4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Header --- */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+  }
+  .site-header a {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .site-header .sep { margin: 0 0.6rem; color: var(--border); }
+  .site-header .page-title { color: var(--text-secondary); font-weight: 500; }
+
+  /* --- Layout --- */
+  .layout {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .content {
+    flex: 1;
+    min-width: 0;
+    max-width: var(--content-max);
+    padding: 2.5rem 0 4rem;
+  }
+
+  /* --- TOC sidebar --- */
+  .toc-sidebar {
+    position: sticky;
+    top: 72px;
+    align-self: flex-start;
+    width: var(--sidebar-width);
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+    padding: 2rem 0 2rem 1.5rem;
+    margin-left: 2rem;
+    flex-shrink: 0;
+  }
+  .toc-sidebar h4 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+  }
+  .toc-sidebar ul { list-style: none; }
+  .toc-sidebar li { margin-bottom: 0.15rem; }
+  .toc-sidebar a {
+    display: block;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    border-radius: 0 4px 4px 0;
+    transition: all 0.15s ease;
+  }
+  .toc-sidebar a:hover { color: var(--accent); background: var(--accent-light); }
+  .toc-sidebar a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+  .toc-sidebar a.toc-h3 { padding-left: 1.4rem; font-size: 0.78rem; }
+
+  @media (max-width: 1099px) {
+    .toc-sidebar { display: none; }
+    .layout { padding: 0 1.2rem; }
+    .content { padding: 2rem 0 3rem; }
+  }
+
+  /* --- Typography --- */
+  h1 { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+  h2 { font-size: 1.5rem; font-weight: 700; margin: 2.8rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); letter-spacing: -0.01em; }
+  h3 { font-size: 1.15rem; font-weight: 650; margin: 2rem 0 0.75rem; }
+  h4 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 1rem; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 650; }
+  ul, ol { margin: 0 0 1rem 1.5rem; }
+  li { margin-bottom: 0.35rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+  /* --- Intro subtitle --- */
+  .subtitle { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+  /* --- Code --- */
+  code {
+    font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  :not(pre) > code {
+    background: var(--inline-code-bg);
+    color: var(--inline-code-text);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 1.2rem 1.4rem;
+    overflow-x: auto;
+    margin: 0 0 1.25rem;
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  /* --- Tables --- */
+  .table-wrap { overflow-x: auto; margin-bottom: 1.25rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--bg-secondary); font-weight: 600; white-space: nowrap; }
+  td code { font-size: 0.85em; }
+
+  /* --- Blockquotes / Callouts --- */
+  blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-light);
+    padding: 0.8rem 1.2rem;
+    margin: 0 0 1.25rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.95rem;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  .callout-warning {
+    border-left: 3px solid var(--warning-border);
+    background: var(--warning-bg);
+    padding: 0.8rem 1.2rem;
+    margin: 0 0 1.25rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.95rem;
+  }
+  .callout-warning p:last-child { margin-bottom: 0; }
+
+  .callout-note {
+    border-left: 3px solid var(--note-border);
+    background: var(--note-bg);
+    padding: 0.8rem 1.2rem;
+    margin: 0 0 1.25rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.95rem;
+  }
+  .callout-note p:last-child { margin-bottom: 0; }
+
+  /* --- Footer --- */
+  .page-footer {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 0;
+    margin-top: 3rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+  .page-footer a { color: var(--text-secondary); }
+  .page-footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <a href="https://docs.langchain.com/oss/python/langgraph">LangGraph</a>
+  <span class="sep">/</span>
+  <span class="page-title">容错</span>
+</header>
+
+<div class="layout">
+<main class="content">
+
+<h1>容错</h1>
+<p class="subtitle">在 LangGraph 中为每个节点配置超时、重试和错误处理。</p>
+
+<p>当节点因外部 API 响应缓慢、瞬态网络错误或未处理的异常而失败时，LangGraph 提供三种可组合的机制：</p>
+<ul>
+  <li><strong>重试</strong> — 根据异常类型和退避设置自动重新运行失败的尝试</li>
+  <li><strong>超时</strong> — 限制单次尝试可以运行的时长</li>
+  <li><strong>错误处理</strong> — 在所有重试耗尽后运行恢复函数</li>
+</ul>
+<p>使用 <code>set_node_defaults</code> 可以为所有节点一次性配置这些机制，而无需在每个 <code>add_node</code> 调用中重复设置。</p>
+<p>这些机制以固定的顺序组合：当节点尝试引发任何异常（包括由超时导致的 <code>NodeTimeoutError</code>）时，重试策略决定是否重试。只有在重试耗尽后，错误处理才会运行。</p>
+<p>关于在超步骤边界干净地停止运行并在稍后恢复，请参见<a href="https://docs.langchain.com/oss/python/langgraph/fault-tolerance#graceful-shutdown">优雅关闭</a>。</p>
+
+<div class="callout-note">
+  <p><strong>注意：</strong>每节点超时和节点级错误处理需要 <code>langgraph>=1.2</code>。</p>
+</div>
+
+<hr>
+
+<h2 id="retries">重试</h2>
+<p>重试策略根据异常类型和退避设置自动重新运行失败的节点尝试。</p>
+<p>将 <code>retry_policy=</code> 传递给 <code>add_node</code>：</p>
+<pre><code>from langgraph.types import RetryPolicy
+
+builder.add_node(
+    "call_api",
+    call_api,
+    retry_policy=RetryPolicy(max_attempts=3),
+)</code></pre>
+
+<h3 id="default-behavior">默认行为</h3>
+<p>默认情况下，<code>retry_on</code> 使用 <code>default_retry_on</code>，它会对<strong>除以下异常及其子类之外的所有异常</strong>进行重试：</p>
+<ul>
+  <li><code>ValueError</code></li>
+  <li><code>TypeError</code></li>
+  <li><code>ArithmeticError</code></li>
+  <li><code>ImportError</code></li>
+  <li><code>LookupError</code></li>
+  <li><code>NameError</code></li>
+  <li><code>SyntaxError</code></li>
+  <li><code>RuntimeError</code></li>
+  <li><code>ReferenceError</code></li>
+  <li><code>StopIteration</code></li>
+  <li><code>StopAsyncIteration</code></li>
+  <li><code>OSError</code></li>
+</ul>
+<p>对于来自 <code>requests</code> 和 <code>httpx</code> 等流行 HTTP 库的异常，它仅对 5xx 状态码进行重试。<code>NodeTimeoutError</code> 默认可重试。</p>
+
+<h3 id="parameters">参数</h3>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>max_attempts</code></td><td><code>int</code></td><td><code>3</code></td><td>最大尝试次数，包括首次。</td></tr>
+    <tr><td><code>initial_interval</code></td><td><code>float</code></td><td><code>0.5</code></td><td>首次重试前的等待秒数。</td></tr>
+    <tr><td><code>backoff_factor</code></td><td><code>float</code></td><td><code>2.0</code></td><td>每次重试后应用的间隔乘数。</td></tr>
+    <tr><td><code>max_interval</code></td><td><code>float</code></td><td><code>128.0</code></td><td>重试之间的最大秒数。</td></tr>
+    <tr><td><code>jitter</code></td><td><code>bool</code></td><td><code>True</code></td><td>为间隔添加随机抖动。</td></tr>
+    <tr><td><code>retry_on</code></td><td><code>type[Exception] | Sequence[type[Exception]] | Callable[[Exception], bool]</code></td><td><code>default_retry_on</code></td><td>要重试的异常，或一个对可重试异常返回 <code>True</code> 的可调用对象。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 id="custom-retry-logic">自定义重试逻辑</h3>
+<p>将可调用对象或异常类型传递给 <code>retry_on</code>。导入 <code>default_retry_on</code> 可以扩展默认行为：</p>
+<pre><code>from langgraph.types import RetryPolicy, default_retry_on
+
+# 自定义重试逻辑
+def custom_retry_on(exc: BaseException) -> bool:
+    if isinstance(exc, MyCustomError):
+        return False
+    return default_retry_on(exc)
+
+builder.add_node(
+    "call_api",
+    call_api,
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=custom_retry_on),
+)</code></pre>
+
+<h3 id="inspect-retry-state">检查重试状态</h3>
+<p>在节点内使用执行信息来检查当前尝试次数。当主调用持续失败时，这对切换到备用方案很有用：</p>
+<pre><code>from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime
+from langgraph.types import RetryPolicy
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    result: str
+
+def my_node(state: State, runtime: Runtime) -> State:
+    # 如果不是首次尝试，使用备用 API
+    if runtime.execution_info.node_attempt > 1:
+        return {"result": call_fallback_api()}
+    return {"result": call_primary_api()}
+
+builder = StateGraph(State)
+builder.add_node("my_node", my_node, retry_policy=RetryPolicy(max_attempts=3))
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)</code></pre>
+<p><code>execution_info</code> 暴露以下字段：</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>属性</th><th>类型</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>node_attempt</code></td><td><code>int</code></td><td>当前尝试次数（从 1 开始）。首次尝试为 <code>1</code>，首次重试为 <code>2</code>，依此类推。</td></tr>
+    <tr><td><code>node_first_attempt_time</code></td><td><code>float | None</code></td><td>首次尝试开始时的 Unix 时间戳。在重试期间保持不变。</td></tr>
+    <tr><td><code>thread_id</code></td><td><code>str | None</code></td><td>当前执行的线程 ID。没有检查点器时为 <code>None</code>。</td></tr>
+    <tr><td><code>run_id</code></td><td><code>str | None</code></td><td>当前执行的运行 ID。未在配置中提供时为 <code>None</code>。</td></tr>
+    <tr><td><code>checkpoint_id</code></td><td><code>str</code></td><td>当前执行的检查点 ID。</td></tr>
+    <tr><td><code>task_id</code></td><td><code>str</code></td><td>当前执行的任务 ID。</td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>execution_info</code> 即使没有重试策略也可用 — <code>node_attempt</code> 默认为 <code>1</code>。</p>
+
+<hr>
+
+<h2 id="timeouts">超时</h2>
+<div class="callout-note">
+  <p><strong>注意：</strong>需要 <code>langgraph>=1.2</code>。</p>
+</div>
+<p><code>add_node</code> 上的 <code>timeout=</code> 参数限制单次节点尝试可以运行的时长。传入一个数字（秒）、<code>timedelta</code> 或 <code>TimeoutPolicy</code> 以分别设置运行和空闲限制：</p>
+<pre><code>from datetime import timedelta
+from langgraph.types import TimeoutPolicy
+
+# 简单的挂钟限制
+builder.add_node("call_model", call_model, timeout=60)
+builder.add_node("call_model", call_model, timeout=timedelta(minutes=2))
+
+# 分别设置运行和空闲限制
+builder.add_node(
+    "call_model",
+    call_model,
+    timeout=TimeoutPolicy(run_timeout=120, idle_timeout=30),
+)</code></pre>
+
+<div class="callout-warning">
+  <p><strong>警告：</strong>节点超时仅适用于 <strong>异步</strong> 节点。具有 <code>timeout</code> 的同步节点在编译时会被拒绝。要包装阻塞 I/O，请在异步节点内使用 <code>asyncio.to_thread</code>。</p>
+</div>
+
+<h3 id="run-timeout">运行超时</h3>
+<p><code>run_timeout</code> 是单次尝试的硬性挂钟限制。无论节点活动如何，它都不会刷新：</p>
+<pre><code>from langgraph.types import TimeoutPolicy
+
+builder.add_node(
+    "call_model",
+    call_model,
+    timeout=TimeoutPolicy(run_timeout=120),
+)</code></pre>
+<p>当超过限制时，LangGraph 会引发 <code>NodeTimeoutError</code>，清除失败尝试的所有写入，并让重试策略决定是否重试。</p>
+
+<h3 id="idle-timeout">空闲超时</h3>
+<p><code>idle_timeout</code> 是进度重置限制。它仅在节点停止产生可观察进度达指定持续时间时触发 — 与 <code>run_timeout</code> 不同，当节点产生进度信号时时钟会重置：</p>
+<pre><code>builder.add_node(
+    "call_model",
+    call_model,
+    timeout=TimeoutPolicy(idle_timeout=30),
+)</code></pre>
+<p>你可以同时设置 <code>run_timeout</code> 和 <code>idle_timeout</code>。先触发的那个会取消尝试。</p>
+
+<h4 id="progress-signals">进度信号</h4>
+<p>在默认的 <code>refresh_on="auto"</code> 下，空闲时钟会在以下任何事件发生时重置：</p>
+<ul>
+  <li>通过 <code>CONFIG_KEY_SEND</code> 进行状态写入</li>
+  <li>流输出（yield 的异步流块）</li>
+  <li>子任务调度</li>
+  <li>运行时流写入器调用</li>
+  <li>来自节点或其后代的任何 LangChain 回调事件（LLM token、工具调用、链启动/结束等）</li>
+</ul>
+
+<h4 id="heartbeat-mode">心跳模式</h4>
+<p>设置 <code>refresh_on="heartbeat"</code> 将刷新源限制为仅显式的 <code>runtime.heartbeat()</code> 调用。当你希望严格的空闲定义不被健谈的子节点重置时，这很有用：</p>
+<pre><code>builder.add_node(
+    "call_model",
+    call_model,
+    timeout=TimeoutPolicy(idle_timeout=30, refresh_on="heartbeat"),
+)</code></pre>
+
+<h4 id="manual-heartbeats">手动心跳</h4>
+<p>对于不会自然发出进度信号的长时间运行工作，调用 <code>runtime.heartbeat()</code> 来手动重置空闲时钟：</p>
+<pre><code>from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime
+from langgraph.types import TimeoutPolicy
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    result: str
+
+async def long_running_node(state: State, runtime: Runtime) -> State:
+    for batch in fetch_batches():
+        process(batch)
+        runtime.heartbeat()  # 手动重置空闲时钟
+    return {"result": "done"}
+
+builder = StateGraph(State)
+builder.add_node(
+    "long_running_node",
+    long_running_node,
+    timeout=TimeoutPolicy(idle_timeout=30, refresh_on="heartbeat"),
+)
+builder.add_edge(START, "long_running_node")
+builder.add_edge("long_running_node", END)</code></pre>
+<p><code>runtime.heartbeat()</code> 在空闲计时尝试之外是一个空操作，因此你可以无条件调用它。</p>
+
+<h3 id="node-timeout-error">NodeTimeoutError</h3>
+<p>当超时触发时，LangGraph 会引发 <code>NodeTimeoutError</code>，其中包含关于触发了哪个限制的结构化上下文：</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>属性</th><th>类型</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>node</code></td><td><code>str</code></td><td>执行超时的节点名称。</td></tr>
+    <tr><td><code>elapsed</code></td><td><code>float</code></td><td>超时触发前经过的秒数。</td></tr>
+    <tr><td><code>kind</code></td><td><code>Literal["idle", "run"]</code></td><td>触发了哪种超时。</td></tr>
+    <tr><td><code>idle_timeout</code></td><td><code>float | None</code></td><td>配置的空闲超时（秒），如有。</td></tr>
+    <tr><td><code>run_timeout</code></td><td><code>float | None</code></td><td>配置的运行超时（秒），如有。</td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>NodeTimeoutError</code> 默认可重试。将 <code>timeout</code> 与重试策略结合使用开箱即用 — 超时时钟在每次新尝试时重置，超时尝试的写入在下次重试前会被清除：</p>
+<pre><code>from langgraph.types import RetryPolicy, TimeoutPolicy
+
+builder.add_node(
+    "call_model",
+    call_model,
+    timeout=TimeoutPolicy(idle_timeout=30),
+    retry_policy=RetryPolicy(max_attempts=3),
+)</code></pre>
+
+<h3 id="dynamic-timeouts-with-send">使用 Send 的动态超时</h3>
+<p>使用 <code>Send</code> 动态分派节点时（例如在 map-reduce 模式中），你可以在 <code>Send</code> 上直接传递超时来覆盖目标节点对该特定推送的静态超时：</p>
+<pre><code>from langgraph.types import Send, TimeoutPolicy
+
+def fan_out(state: OverallState):
+    return [
+        Send("process_item", {"item": item}, timeout=TimeoutPolicy(idle_timeout=15))
+        for item in state["items"]
+    ]</code></pre>
+<p>如果 <code>Send</code> 上省略超时，则应用目标节点的超时（在 <code>add_node</code> 时设置）。这允许你在节点上设置默认超时，并在单个调用中收紧它。</p>
+
+<hr>
+
+<h2 id="error-handling">错误处理</h2>
+<div class="callout-note">
+  <p><strong>注意：</strong>需要 <code>langgraph>=1.2</code>。</p>
+</div>
+<p>错误处理在节点失败且所有重试耗尽后运行。它接收当前状态并可以使用 <code>Command</code> 更新状态或路由到不同的节点。这对于补偿流程（Saga 模式）很有用，你希望优雅地恢复而不是中止整个图。</p>
+<p>将 <code>error_handler=</code> 传递给 <code>add_node</code>：</p>
+<pre><code>from langgraph.errors import NodeError
+from langgraph.types import Command, RetryPolicy
+from langgraph.graph import StateGraph, START
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    status: str
+
+def charge_payment(state: State) -> State:
+    raise RuntimeError("payment gateway timeout")
+
+# 错误处理函数
+def payment_error_handler(state: State, error: NodeError) -> Command:
+    return Command(
+        update={"status": f"compensated: {error.error}"},
+        goto="finalize",
+    )
+
+def finalize(state: State) -> State:
+    return state
+
+graph = (
+    StateGraph(State)
+    .add_node(
+        "charge_payment",
+        charge_payment,
+        retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
+        error_handler=payment_error_handler,
+    )
+    .add_node("finalize", finalize)
+    .add_edge(START, "charge_payment")
+    .compile()
+)</code></pre>
+<p>处理程序仅在重试策略耗尽后触发，或者在没有配置重试策略时立即触发。重试策略和错误处理是解耦的：独立配置何时重试和何时补偿。</p>
+
+<h3 id="node-error">NodeError</h3>
+<p>错误处理程序通过类型化的 <code>error: NodeError</code> 参数接收失败上下文，通过类型注解注入（与 <code>runtime: Runtime</code> 相同的模式）：</p>
+<pre><code>from langgraph.errors import NodeError
+
+def my_handler(state: State, error: NodeError) -> Command:
+    print(f"Node {error.node} failed with: {error.error}")
+    return Command(update={"status": "recovered"}, goto="next_step")</code></pre>
+<p><code>NodeError</code> 是一个冻结的数据类，包含两个字段：</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>属性</th><th>类型</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>node</code></td><td><code>str</code></td><td>执行失败的节点名称。</td></tr>
+    <tr><td><code>error</code></td><td><code>BaseException</code></td><td>失败节点引发的异常。</td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>error: NodeError</code> 参数是可选的。不需要失败上下文的处理程序可以使用更简单的签名，如 <code>(state)</code> 或 <code>(state, runtime)</code>。</p>
+
+<h3 id="route-with-command">使用 Command 路由</h3>
+<p>错误处理程序可以返回 <code>Command</code> 来更新状态并路由到特定节点，从而实现 Saga/补偿模式：</p>
+<pre><code>from langgraph.errors import NodeError
+from langgraph.types import Command, RetryPolicy
+from langgraph.graph import StateGraph, START
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    status: str
+
+def reserve_inventory(state: State) -> State:
+    return {"status": "reserved"}
+
+def charge_payment(state: State) -> State:
+    raise RuntimeError("payment timeout")
+
+# 补偿处理程序
+def payment_error_handler(state: State, error: NodeError) -> Command:
+    return Command(
+        update={"status": f"compensated_after_{error.node}: {error.error}"},
+        goto="finalize",
+    )
+
+def finalize(state: State) -> State:
+    return state
+
+graph = (
+    StateGraph(State)
+    .add_node("reserve_inventory", reserve_inventory)
+    .add_node(
+        "charge_payment",
+        charge_payment,
+        retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
+        error_handler=payment_error_handler,
+    )
+    .add_node("finalize", finalize)
+    .add_edge(START, "reserve_inventory")
+    .add_edge("reserve_inventory", "charge_payment")
+    .compile()
+)</code></pre>
+<p><code>charge_payment</code> 对 <code>ConnectionError</code> 最多重试 3 次。如果重试耗尽（或错误不是 <code>ConnectionError</code>），处理程序通过更新状态并路由到 <code>finalize</code> 来补偿，而不是中止图。</p>
+
+<h3 id="resume-safe-failures">可恢复的安全失败</h3>
+<div class="callout-note">
+  <p><strong>注意：</strong>失败来源会被检查点化。如果图在节点失败后但处理程序完成前被中断或进程崩溃，当图从检查点恢复时，处理程序会看到相同的 <code>NodeError</code> 上下文。</p>
+</div>
+
+<h3 id="behavior-with-interrupt">与 interrupt() 的行为</h3>
+<div class="callout-warning">
+  <p><strong>警告：</strong>在节点内引发的 <code>interrupt()</code> <strong>不会</strong>被路由到错误处理程序。中断使用 <code>GraphBubbleUp</code> 机制暂停图执行以用于人机交互工作流，绕过重试策略和错误处理程序。图照常暂停。</p>
+</div>
+
+<h3 id="subgraph-failures">子图失败</h3>
+<p>如果节点包装了子图且子图引发了未处理的异常，该异常会冒泡到父节点。如果父节点有错误处理程序，处理程序会以子图的异常作为 <code>error.error</code> 触发。</p>
+
+<hr>
+
+<h2 id="graph-defaults">图默认值</h2>
+<div class="callout-note">
+  <p><strong>注意：</strong>需要 <code>langgraph>=1.2</code>。</p>
+</div>
+<p>不要在每个 <code>add_node</code> 调用中重复相同的 <code>retry_policy=</code>、<code>error_handler=</code>、<code>timeout=</code> 或 <code>cache_policy=</code>，而是使用 <code>set_node_defaults()</code> 在一个位置配置图级别的默认值：</p>
+<pre><code>from langgraph.errors import NodeError
+from langgraph.types import RetryPolicy, TimeoutPolicy
+from langgraph.graph import StateGraph, START
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    status: str
+
+# 默认错误处理程序
+def default_error_handler(state: State, error: NodeError) -> State:
+    return {"status": f"handled: {error.error}"}
+
+graph = (
+    StateGraph(State)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=3),
+        error_handler=default_error_handler,
+        timeout=TimeoutPolicy(run_timeout=30),
+    )
+    .add_node("step_a", step_a)
+    .add_node("step_b", step_b)
+    .add_edge(START, "step_a")
+    .compile()
+)</code></pre>
+<p><code>step_a</code> 和 <code>step_b</code> 现在共享相同的重试策略、错误处理和超时，无需任何重复。</p>
+
+<h3 id="precedence">优先级</h3>
+<p>直接传递给 <code>add_node()</code> 的每节点值始终覆盖 <code>set_node_defaults()</code> 设置的默认值。默认值在 <code>compile()</code> 时解析，因此你可以在 <code>add_node()</code> 之前或之后以任意顺序调用 <code>set_node_defaults()</code>：</p>
+<pre><code>graph = (
+    StateGraph(State)
+    .set_node_defaults(error_handler=default_error_handler)
+    .add_node("step_a", step_a)                                      # 使用 default_error_handler
+    .add_node("step_b", step_b, error_handler=custom_error_handler)  # 使用 custom_error_handler
+    .add_edge(START, "step_a")
+    .compile()
+)</code></pre>
+
+<h3 id="default-error-handler">默认错误处理程序</h3>
+<p>当你想要一个统一的捕获所有失败节点（没有自己处理程序的节点）的恢复函数时，<code>error_handler</code> 默认值特别有价值。处理程序接受与<a href="#error-handling">错误处理</a>中描述的相同的 <code>(state, error: NodeError)</code> 签名：</p>
+<pre><code>from langgraph.errors import NodeError
+from langgraph.graph import StateGraph, START
+from langgraph.types import RetryPolicy
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    status: str
+
+def always_failing(state: State) -> State:
+    raise ValueError("something went wrong")
+
+# 默认处理程序
+def default_handler(state: State, error: NodeError) -> State:
+    return {"status": f"recovered from {error.node}: {error.error}"}
+
+graph = (
+    StateGraph(State)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=2),
+        error_handler=default_handler,
+    )
+    .add_node("always_failing", always_failing)
+    .add_edge(START, "always_failing")
+    .compile()
+)</code></pre>
+<p>节点重试两次后，<code>default_handler</code> 运行。如果需要访问 <code>thread_id</code> 等配置值，默认处理程序也接受 <code>RunnableConfig</code> 作为可选的第三个参数：</p>
+<pre><code>from langchain_core.runnables import RunnableConfig
+
+def default_handler(state: State, error: NodeError, config: RunnableConfig) -> State:
+    thread_id = config["configurable"].get("thread_id")
+    return {"status": f"handled on thread {thread_id}"}</code></pre>
+
+<h3 id="applicability-matrix">适用性矩阵</h3>
+<p>并非所有默认值都适用于所有节点类型。错误处理节点（通过 <code>add_node(error_handler=...)</code> 注册的节点）被排除在某些默认值之外，以防止不安全的行为：</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th><code>set_node_defaults</code> 参数</th><th>适用于常规节点</th><th>适用于错误处理节点</th><th>原因</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>retry_policy</code></td><td>✅</td><td>✅</td><td>处理程序应在瞬态故障时重试</td></tr>
+    <tr><td><code>timeout</code></td><td>✅</td><td>✅</td><td>卡住的处理程序应像卡住的常规节点一样被取消</td></tr>
+    <tr><td><code>error_handler</code></td><td>✅</td><td>❌</td><td>处理程序永远不能捕获自身</td></tr>
+    <tr><td><code>cache_policy</code></td><td>✅</td><td>❌</td><td>缓存处理程序结果是不安全的</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 id="scope">作用域</h3>
+<p>在父图上设置的默认值<strong>不会</strong>被子图继承。每个图维护自己的默认值。</p>
+
+<hr>
+
+<h2 id="functional-api">函数式 API</h2>
+<p>相同的 <code>timeout=</code> 和 <code>retry_policy=</code> 参数可用于函数式 API 中的 <code>@task</code> 和 <code>@entrypoint</code>：</p>
+<pre><code>from langgraph.func import entrypoint, task
+from langgraph.types import RetryPolicy, TimeoutPolicy
+
+@task(
+    timeout=TimeoutPolicy(idle_timeout=30),
+    retry_policy=RetryPolicy(max_attempts=3),
+)
+async def call_api(url: str) -> str:
+    response = await fetch(url)
+    return response.text
+
+@entrypoint(timeout=60)
+async def my_workflow(inputs: dict) -> str:
+    result = await call_api("https://api.example.com/data")
+    return result</code></pre>
+<p>行为与 <code>add_node</code> 完全相同：超时时引发 <code>NodeTimeoutError</code>，缓冲的写入被清除，重试策略决定是否重试。</p>
+
+<hr>
+
+<h2 id="graceful-shutdown">优雅关闭</h2>
+<p>协作关闭让你在当前超步骤完成后停止正在运行的图运行，并保存可恢复的检查点。这对于处理 SIGTERM 信号或任何需要回收资源而不丢失工作的外部监管者很有用。</p>
+<div class="callout-note">
+  <p><strong>注意：</strong>需要 <code>langgraph>=1.2</code>。</p>
+</div>
+<p>创建 <code>RunControl</code> 并将其作为 <code>control=</code> 传递给 <code>invoke</code> 或 <code>stream</code>。从任何线程调用 <code>request_drain()</code> 以发出停止运行的信号：</p>
+<pre><code>from langgraph.runtime import RunControl
+from langgraph.errors import GraphDrained
+
+control = RunControl()
+
+# 在信号处理程序或监管者中：
+# control.request_drain("sigterm")
+
+try:
+    result = graph.invoke(inputs, config, control=control)
+except GraphDrained as e:
+    # 图提前停止并保存了检查点。
+    # 使用相同的配置稍后恢复。
+    print(f"Drained: {e.reason}")</code></pre>
+
+<h3 id="drain-semantics">排空语义</h3>
+<p>排空是协作的，在超步骤之间操作，不会抢占正在运行的工作：</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>场景</th><th>行为</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>节点正在执行中</td><td>运行至完成。排空在下一个超步骤生效。</td></tr>
+    <tr><td>具有重试策略的节点正在重试</td><td>重试循环运行至耗尽或成功。之后排空生效。</td></tr>
+    <tr><td>图在与排空相同的时刻自然完成</td><td>正常返回。检查 <code>control.drain_requested</code> 以区分正常运行。</td></tr>
+    <tr><td>还有更多超步骤</td><td>引发 <code>GraphDrained(reason)</code>。检查点已保存且可恢复。</td></tr>
+    <tr><td>子图请求排空</td><td><code>GraphDrained</code> 冒泡到父图并在其自身的下一个超步骤边界停止。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 id="resume-after-drain">排空后恢复</h3>
+<p>使用 <code>invoke(None, config)</code> 和相同的 <code>thread_id</code> 恢复已排空的运行：</p>
+<pre><code>result = graph.invoke(None, config)</code></pre>
+
+<h3 id="read-drain-state-inside-node">在节点内读取排空状态</h3>
+<p>通过 <code>runtime</code> 参数访问排空状态，以在到达超步骤边界前调整节点行为：</p>
+<pre><code>from langgraph.runtime import Runtime
+
+async def my_node(state: State, runtime: Runtime) -> State:
+    if runtime.drain_requested:
+        # 跳过昂贵的工作并返回最小结果
+        return {"status": "skipped", "reason": runtime.drain_reason}
+    return {"status": await do_work()}</code></pre>
+
+<h3 id="sigterm-hook-pattern">SIGTERM 钩子模式</h3>
+<p>处理进程关闭的推荐模式：</p>
+<pre><code>import signal
+from langgraph.runtime import RunControl
+from langgraph.errors import GraphDrained
+
+control = RunControl()
+signal.signal(signal.SIGTERM, lambda *_: control.request_drain("sigterm"))
+
+try:
+    result = graph.invoke(inputs, config, control=control)
+except GraphDrained as e:
+    log.info("graph drained: %s", e.reason)
+    # 使用相同的配置在下次启动时恢复</code></pre>
+<div class="callout-note">
+  <p><strong>注意：</strong><code>request_drain()</code> 不会取消正在运行的 asyncio 任务或终止线程。要设置硬性上限，请将排空与优雅超时和任务取消配对使用。</p>
+</div>
+
+<hr>
+
+<h2 id="limitations">限制</h2>
+<ul>
+  <li><strong>超时仅限异步</strong>：具有 <code>timeout</code> 的同步节点在编译时会被拒绝。</li>
+  <li><strong>每个节点一个处理程序</strong>：每个节点最多只能有一个 <code>error_handler</code>。</li>
+  <li><strong>处理程序失败会冒泡</strong>：如果错误处理程序本身引发异常，该异常会像节点没有处理程序一样传播。</li>
+  <li><strong><code>set_node_defaults</code> 不被子图继承</strong>：每个图独立管理自己的默认值。</li>
+</ul>
+
+<div class="page-footer">
+  <p>
+    <a href="https://docs.langchain.com/use-these-docs">将这些文档连接</a>到 Claude、VSCode 等，通过 MCP 获取实时答案。
+    · <a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/fault-tolerance.mdx">在 GitHub 上编辑此页面</a>
+    · <a href="https://github.com/langchain-ai/docs/issues/new/choose">提交问题</a>
+  </p>
+</div>
+
+</main>
+
+<!-- Right-side sticky TOC -->
+<nav class="toc-sidebar" id="toc">
+  <h4>目录</h4>
+  <ul>
+    <li><a href="#retries" class="toc-h2">重试</a></li>
+    <li><a href="#default-behavior" class="toc-h3">默认行为</a></li>
+    <li><a href="#parameters" class="toc-h3">参数</a></li>
+    <li><a href="#custom-retry-logic" class="toc-h3">自定义重试逻辑</a></li>
+    <li><a href="#inspect-retry-state" class="toc-h3">检查重试状态</a></li>
+    <li><a href="#timeouts" class="toc-h2">超时</a></li>
+    <li><a href="#run-timeout" class="toc-h3">运行超时</a></li>
+    <li><a href="#idle-timeout" class="toc-h3">空闲超时</a></li>
+    <li><a href="#progress-signals" class="toc-h3">进度信号</a></li>
+    <li><a href="#heartbeat-mode" class="toc-h3">心跳模式</a></li>
+    <li><a href="#manual-heartbeats" class="toc-h3">手动心跳</a></li>
+    <li><a href="#node-timeout-error" class="toc-h3">NodeTimeoutError</a></li>
+    <li><a href="#dynamic-timeouts-with-send" class="toc-h3">使用 Send 的动态超时</a></li>
+    <li><a href="#error-handling" class="toc-h2">错误处理</a></li>
+    <li><a href="#node-error" class="toc-h3">NodeError</a></li>
+    <li><a href="#route-with-command" class="toc-h3">使用 Command 路由</a></li>
+    <li><a href="#resume-safe-failures" class="toc-h3">可恢复的安全失败</a></li>
+    <li><a href="#behavior-with-interrupt" class="toc-h3">与 interrupt() 的行为</a></li>
+    <li><a href="#subgraph-failures" class="toc-h3">子图失败</a></li>
+    <li><a href="#graph-defaults" class="toc-h2">图默认值</a></li>
+    <li><a href="#precedence" class="toc-h3">优先级</a></li>
+    <li><a href="#default-error-handler" class="toc-h3">默认错误处理程序</a></li>
+    <li><a href="#applicability-matrix" class="toc-h3">适用性矩阵</a></li>
+    <li><a href="#scope" class="toc-h3">作用域</a></li>
+    <li><a href="#functional-api" class="toc-h2">函数式 API</a></li>
+    <li><a href="#graceful-shutdown" class="toc-h2">优雅关闭</a></li>
+    <li><a href="#drain-semantics" class="toc-h3">排空语义</a></li>
+    <li><a href="#resume-after-drain" class="toc-h3">排空后恢复</a></li>
+    <li><a href="#read-drain-state-inside-node" class="toc-h3">在节点内读取排空状态</a></li>
+    <li><a href="#sigterm-hook-pattern" class="toc-h3">SIGTERM 钩子模式</a></li>
+    <li><a href="#limitations" class="toc-h2">限制</a></li>
+  </ul>
+</nav>
+
+</div>
+
+<script>
+(function() {
+  const tocLinks = document.querySelectorAll('#toc a');
+  const headings = [];
+
+  tocLinks.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) headings.push({ id, el, link });
+  });
+
+  function updateActive() {
+    const scrollY = window.scrollY + 90;
+    let current = headings[0];
+
+    for (const h of headings) {
+      if (h.el.offsetTop <= scrollY) {
+        current = h;
+      }
+    }
+
+    tocLinks.forEach(l => l.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+})();
+</script>
+
+</body>
+</html>

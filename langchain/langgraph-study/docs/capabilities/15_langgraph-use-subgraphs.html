@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>使用子图 - LangGraph</title>
+<style>
+:root {
+  --color-bg: #ffffff;
+  --color-text: #1a1a2e;
+  --color-text-secondary: #555;
+  --color-border: #e2e8f0;
+  --color-accent: #3b82f6;
+  --color-accent-light: #dbeafe;
+  --color-code-bg: #1e1e2e;
+  --color-code-text: #cdd6f4;
+  --color-inline-code-bg: #f1f5f9;
+  --color-blockquote-bg: #eff6ff;
+  --color-blockquote-border: #3b82f6;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #f59e0b;
+  --color-tip-bg: #ecfdf5;
+  --color-tip-border: #10b981;
+  --color-table-header: #f8fafc;
+  --color-toc-active: #3b82f6;
+  --sidebar-width: 260px;
+  --content-max: 780px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.75;
+  font-size: 16px;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.page-wrapper {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2rem 4rem;
+}
+
+.content-area {
+  max-width: var(--content-max);
+}
+
+/* TOC */
+.toc {
+  position: fixed;
+  top: 2rem;
+  right: max(calc((100vw - 1100px) / 2), 1rem);
+  width: var(--sidebar-width);
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  border-left: 2px solid var(--color-border);
+  padding-left: 1rem;
+  z-index: 100;
+}
+
+.toc-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 0.75rem;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toc ul { list-style: none; padding: 0; margin: 0; }
+.toc li { margin-bottom: 0.2rem; }
+.toc a {
+  display: block;
+  padding: 0.2rem 0.5rem;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  text-decoration: none;
+}
+.toc a:hover { color: var(--color-accent); background: var(--color-accent-light); }
+.toc a.active { color: var(--color-toc-active); font-weight: 600; background: var(--color-accent-light); }
+.toc .toc-h3 { padding-left: 1.2rem; font-size: 12.5px; }
+
+@media (max-width: 1099px) { .toc { display: none; } }
+
+/* Typography */
+h1 { font-size: 2.2rem; font-weight: 800; margin: 2rem 0 1rem; line-height: 1.2; }
+h2 { font-size: 1.55rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--color-border); line-height: 1.3; }
+h3 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.75rem; line-height: 1.35; }
+h4 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+
+p { margin-bottom: 1rem; }
+ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+li { margin-bottom: 0.35rem; }
+li ul, li ol { margin-top: 0.35rem; margin-bottom: 0; }
+
+hr { border: none; border-top: 2px solid var(--color-border); margin: 2.5rem 0; }
+
+strong { font-weight: 700; }
+
+/* Inline code */
+code {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--color-inline-code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+/* Code blocks */
+pre {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.2rem 1.5rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+  line-height: 1.55;
+  font-size: 14px;
+  position: relative;
+}
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--color-blockquote-border);
+  background: var(--color-blockquote-bg);
+  padding: 0.8rem 1.2rem;
+  margin: 1.2rem 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.95em;
+}
+blockquote.warning {
+  border-left-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+blockquote.tip {
+  border-left-color: var(--color-tip-border);
+  background: var(--color-tip-bg);
+}
+blockquote p:last-child { margin-bottom: 0; }
+blockquote strong { display: block; margin-bottom: 0.3rem; }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  font-size: 0.93em;
+}
+th, td {
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+}
+th { background: var(--color-table-header); font-weight: 600; }
+
+/* Details/Summary */
+details {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+summary {
+  padding: 0.8rem 1.2rem;
+  background: var(--color-table-header);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95em;
+}
+summary:hover { background: var(--color-accent-light); }
+details[open] summary { border-bottom: 1px solid var(--color-border); }
+details > :not(summary) { padding: 0 1.2rem; }
+details > :last-child { padding-bottom: 1rem; }
+details > pre { margin: 1rem 1.2rem; border-radius: 6px; }
+
+/* Image */
+img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+
+/* Footer */
+.page-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--color-border);
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+}
+.page-footer p { margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<!-- TOC -->
+<nav class="toc" id="toc">
+  <div class="toc-title">目录</div>
+  <ul>
+    <li><a href="#setup">安装配置</a></li>
+    <li><a href="#define-subgraph-communication">定义子图通信</a></li>
+    <li class="toc-h3"><a href="#call-a-subgraph-inside-a-node">在节点内调用子图</a></li>
+    <li class="toc-h3"><a href="#add-a-subgraph-as-a-node">将子图作为节点添加</a></li>
+    <li><a href="#subgraph-persistence">子图持久化</a></li>
+    <li class="toc-h3"><a href="#stateful">有状态</a></li>
+    <li class="toc-h3"><a href="#stateless">无状态</a></li>
+    <li class="toc-h3"><a href="#checkpointer-reference">Checkpointer 参考</a></li>
+    <li><a href="#view-subgraph-state">查看子图状态</a></li>
+    <li><a href="#stream-subgraph-outputs">流式输出子图</a></li>
+  </ul>
+</nav>
+
+<div class="page-wrapper">
+<div class="content-area">
+
+<h1>子图</h1>
+
+<p>本指南介绍使用子图的机制。子图是一个<a href="https://docs.langchain.com/oss/python/langgraph/graph-api#graphs">图（graph）</a>，被用作另一个图中的<a href="https://docs.langchain.com/oss/python/langgraph/graph-api#nodes">节点（node）</a>。</p>
+
+<p>子图适用于以下场景：</p>
+
+<ul>
+  <li>构建<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体系统</a></li>
+  <li>在多个图中复用同一组节点</li>
+  <li>分布式开发：当希望不同团队独立开发图的不同部分时，可以将每个部分定义为子图，只要子图接口（输入和输出 schema）保持一致，父图就可以在不了解子图细节的情况下进行构建</li>
+</ul>
+
+<h2 id="setup">安装配置</h2>
+
+<pre><code>pip install -U langgraph</code></pre>
+
+<pre><code>uv add langgraph</code></pre>
+
+<blockquote>
+  <strong>为 LangGraph 开发设置 LangSmith</strong>
+  注册 <a href="https://smith.langchain.com?utm_source=docs&utm_medium=cta&utm_campaign=langsmith-signup&utm_content=oss-langgraph-use-subgraphs">LangSmith</a>，快速发现问题并提升 LangGraph 项目的性能。
+</blockquote>
+
+<h2 id="define-subgraph-communication">定义子图通信</h2>
+
+<p>添加子图时，需要定义父图和子图之间的通信方式：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>模式</th>
+      <th>使用场景</th>
+      <th>状态 Schema</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="#call-a-subgraph-inside-a-node">在节点内调用子图</a></td>
+      <td>父图和子图具有<strong>不同的状态 schema</strong>（无共享键），或者需要在两者之间进行状态转换</td>
+      <td>编写包装函数，将父图状态映射到子图输入，再将子图输出映射回父图状态</td>
+    </tr>
+    <tr>
+      <td><a href="#add-a-subgraph-as-a-node">将子图作为节点添加</a></td>
+      <td>父图和子图<strong>共享状态键</strong>——子图从与父图相同的通道读取和写入</td>
+      <td>直接将编译后的子图传递给 <code>add_node</code>——无需包装函数</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="call-a-subgraph-inside-a-node">在节点内调用子图</h3>
+
+<p>当父图和子图具有<strong>不同的状态 schema</strong>（无共享键）时，在节点函数内调用子图。这在<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体</a>系统中为每个智能体保持私有消息历史记录时很常见。</p>
+
+<p>节点函数在调用子图之前将父图状态转换为子图状态，并在返回之前将结果转换回父图状态。</p>
+
+<pre><code><span style="color:#cdd6f4;">from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START
+
+class SubgraphState(TypedDict):
+    bar: str
+
+# 子图
+
+def subgraph_node_1(state: SubgraphState):
+    return {"bar": "hi! " + state["bar"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph = subgraph_builder.compile()
+
+# 父图
+
+class State(TypedDict):
+    foo: str
+
+def call_subgraph(state: State):
+    # 将状态转换为子图状态
+    subgraph_output = subgraph.invoke({"bar": state["foo"]})
+    # 将响应转换回父图状态
+    return {"foo": subgraph_output["bar"]}
+
+builder = StateGraph(State)
+builder.add_node("node_1", call_subgraph)
+builder.add_edge(START, "node_1")
+graph = builder.compile()</span></code></pre>
+
+<details>
+<summary>完整示例：不同的状态 schema</summary>
+
+<pre><code>from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START
+
+# 定义子图
+class SubgraphState(TypedDict):
+    # 注意：这些键与父图状态没有共享
+    bar: str
+    baz: str
+
+def subgraph_node_1(state: SubgraphState):
+    return {"baz": "baz"}
+
+def subgraph_node_2(state: SubgraphState):
+    return {"bar": state["bar"] + state["baz"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_node(subgraph_node_2)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph = subgraph_builder.compile()
+
+# 定义父图
+class ParentState(TypedDict):
+    foo: str
+
+def node_1(state: ParentState):
+    return {"foo": "hi! " + state["foo"]}
+
+def node_2(state: ParentState):
+    # 将状态转换为子图状态
+    response = subgraph.invoke({"bar": state["foo"]})
+    # 将响应转换回父图状态
+    return {"foo": response["bar"]}
+
+
+builder = StateGraph(ParentState)
+builder.add_node("node_1", node_1)
+builder.add_node("node_2", node_2)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+graph = builder.compile()
+
+stream = graph.stream_events({"foo": "foo"}, version="v3")
+for event in stream:
+    if event["method"] == "updates":
+        print(event["params"]["namespace"], event["params"]["data"])</code></pre>
+
+<pre><code>[] {'node_1': {'foo': 'hi! foo'}}
+['node_2:577b710b-64ae-31fb-9455-6a4d4cc2b0b9'] {'subgraph_node_1': {'baz': 'baz'}}
+['node_2:577b710b-64ae-31fb-9455-6a4d4cc2b0b9'] {'subgraph_node_2': {'bar': 'hi! foobaz'}}
+[] {'node_2': {'foo': 'hi! foobaz'}}</code></pre>
+
+</details>
+
+<details>
+<summary>完整示例：不同的状态 schema（两级子图）</summary>
+
+<p>这是一个包含两级子图的示例：父图 -> 子图 -> 孙图。</p>
+
+<pre><code># 孙图
+from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START, END
+
+class GrandChildState(TypedDict):
+    my_grandchild_key: str
+
+def grandchild_1(state: GrandChildState) -> GrandChildState:
+    # 注意：此处无法访问子图或父图的键
+    return {"my_grandchild_key": state["my_grandchild_key"] + ", how are you"}
+
+
+grandchild = StateGraph(GrandChildState)
+grandchild.add_node("grandchild_1", grandchild_1)
+
+grandchild.add_edge(START, "grandchild_1")
+grandchild.add_edge("grandchild_1", END)
+
+grandchild_graph = grandchild.compile()
+
+# 子图
+class ChildState(TypedDict):
+    my_child_key: str
+
+def call_grandchild_graph(state: ChildState) -> ChildState:
+    # 注意：此处无法访问父图或孙图的键
+    grandchild_graph_input = {"my_grandchild_key": state["my_child_key"]}
+    grandchild_graph_output = grandchild_graph.invoke(grandchild_graph_input)
+    return {"my_child_key": grandchild_graph_output["my_grandchild_key"] + " today?"}
+
+child = StateGraph(ChildState)
+# 这里传递的是函数而非编译后的图（`grandchild_graph`）
+child.add_node("child_1", call_grandchild_graph)
+child.add_edge(START, "child_1")
+child.add_edge("child_1", END)
+child_graph = child.compile()
+
+# 父图
+class ParentState(TypedDict):
+    my_key: str
+
+def parent_1(state: ParentState) -> ParentState:
+    # 注意：此处无法访问子图或孙图的键
+    return {"my_key": "hi " + state["my_key"]}
+
+def parent_2(state: ParentState) -> ParentState:
+    return {"my_key": state["my_key"] + " bye!"}
+
+def call_child_graph(state: ParentState) -> ParentState:
+    child_graph_input = {"my_child_key": state["my_key"]}
+    child_graph_output = child_graph.invoke(child_graph_input)
+    return {"my_key": child_graph_output["my_child_key"]}
+
+parent = StateGraph(ParentState)
+parent.add_node("parent_1", parent_1)
+# 这里传递的是函数而非编译后的图（`child_graph`）
+parent.add_node("child", call_child_graph)
+parent.add_node("parent_2", parent_2)
+
+parent.add_edge(START, "parent_1")
+parent.add_edge("parent_1", "child")
+parent.add_edge("child", "parent_2")
+parent.add_edge("parent_2", END)
+
+parent_graph = parent.compile()
+
+stream = parent_graph.stream_events({"my_key": "Bob"}, version="v3")
+for event in stream:
+    if event["method"] == "updates":
+        print(event["params"]["namespace"], event["params"]["data"])</code></pre>
+
+<pre><code>[] {'parent_1': {'my_key': 'hi Bob'}}
+['child:2e26e9ce-602f-862c-aa66-1ea5a4655e3b', 'child_1:781bb3b1-3971-84ce-810b-acf819a03f9c'] {'grandchild_1': {'my_grandchild_key': 'hi Bob, how are you'}}
+['child:2e26e9ce-602f-862c-aa66-1ea5a4655e3b'] {'child_1': {'my_child_key': 'hi Bob, how are you today?'}}
+[] {'child': {'my_key': 'hi Bob, how are you today?'}}
+[] {'parent_2': {'my_key': 'hi Bob, how are you today? bye!'}}</code></pre>
+
+</details>
+
+<h3 id="add-a-subgraph-as-a-node">将子图作为节点添加</h3>
+
+<p>当父图和子图<strong>共享状态键</strong>时，可以直接将编译后的子图传递给 <code>add_node</code>。无需包装函数——子图会自动从父图的状态通道读取和写入。例如，在<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体</a>系统中，智能体通常通过共享的 <a href="https://docs.langchain.com/oss/python/langgraph/graph-api#why-use-messages">messages</a> 键进行通信。</p>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/ybiAaBfoBvFquMDz/oss/images/subgraph.png?fit=max&auto=format&n=ybiAaBfoBvFquMDz&q=85&s=c280df5c968cd4237b0b5d03823d8946" alt="SQL 智能体图">
+
+<p>如果子图与父图共享状态键，可以按照以下步骤将其添加到图中：</p>
+
+<ol>
+  <li>定义子图工作流（下面示例中的 <code>subgraph_builder</code>）并进行编译</li>
+  <li>在定义父图工作流时，将编译后的子图传递给 <a href="https://reference.langchain.com/python/langgraph/graph/state/StateGraph/add_node"><code>add_node</code></a> 方法</li>
+</ol>
+
+<pre><code>from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START
+
+class State(TypedDict):
+    foo: str
+
+# 子图
+
+def subgraph_node_1(state: State):
+    return {"foo": "hi! " + state["foo"]}
+
+subgraph_builder = StateGraph(State)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph = subgraph_builder.compile()
+
+# 父图
+
+builder = StateGraph(State)
+builder.add_node("node_1", subgraph)
+builder.add_edge(START, "node_1")
+graph = builder.compile()</code></pre>
+
+<details>
+<summary>完整示例：共享状态 schema</summary>
+
+<pre><code>from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START
+
+# 定义子图
+class SubgraphState(TypedDict):
+    foo: str  # 与父图状态共享
+    bar: str  # 子图私有
+
+def subgraph_node_1(state: SubgraphState):
+    return {"bar": "bar"}
+
+def subgraph_node_2(state: SubgraphState):
+    # 注意：此节点使用了仅在子图中可用的状态键（'bar'）
+    # 并对共享状态键（'foo'）发送更新
+    return {"foo": state["foo"] + state["bar"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_node(subgraph_node_2)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph = subgraph_builder.compile()
+
+# 定义父图
+class ParentState(TypedDict):
+    foo: str
+
+def node_1(state: ParentState):
+    return {"foo": "hi! " + state["foo"]}
+
+builder = StateGraph(ParentState)
+builder.add_node("node_1", node_1)
+builder.add_node("node_2", subgraph)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+graph = builder.compile()
+
+stream = graph.stream_events({"foo": "foo"}, version="v3")
+for event in stream:
+    if event["method"] == "updates" and not event["params"]["namespace"]:
+        print(event["params"]["data"])</code></pre>
+
+<pre><code>{'node_1': {'foo': 'hi! foo'}}
+{'node_2': {'foo': 'hi! foobar'}}</code></pre>
+
+</details>
+
+<h2 id="subgraph-persistence">子图持久化</h2>
+
+<p>使用子图时，需要决定其内部数据在调用之间如何处理。考虑一个将任务委派给专业子智能体的客户支持机器人："账单专家"子智能体是否应该记住客户之前的问题，还是每次调用时都重新开始？</p>
+
+<p><code>.compile()</code> 上的 <code>checkpointer</code> 参数控制子图持久化：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>模式</th>
+      <th><code>checkpointer=</code></th>
+      <th>行为</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="#per-invocation-default">按调用</a></td>
+      <td><code>None</code>（默认）</td>
+      <td>每次调用重新开始，并继承父图的 checkpointer 以支持单次调用内的<a href="https://docs.langchain.com/oss/python/langgraph/interrupts">中断</a>和<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久执行</a>。</td>
+    </tr>
+    <tr>
+      <td><a href="#per-thread">按线程</a></td>
+      <td><code>True</code></td>
+      <td>状态在同一线程的调用之间累积。每次调用从上次结束处继续。</td>
+    </tr>
+    <tr>
+      <td><a href="#stateless">无状态</a></td>
+      <td><code>False</code></td>
+      <td>完全不使用检查点——像普通函数调用一样运行。不支持中断或持久执行。</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>按调用模式是大多数应用的正确选择，包括<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体</a>系统中子智能体处理独立请求的场景。当子智能体需要多轮对话记忆时，使用按线程模式。</p>
+
+<blockquote>
+  <strong>注意：</strong>父图必须使用 checkpointer 进行编译，子图持久化功能（中断、状态检查、按线程记忆）才能正常工作。参见<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a>。
+</blockquote>
+
+<blockquote>
+  <strong>信息：</strong>下面的示例使用 LangChain 的 <a href="https://reference.langchain.com/python/langchain/agents/factory/create_agent"><code>create_agent</code></a>，这是一种构建智能体的常用方式。<code>create_agent</code> 底层生成一个 <a href="https://docs.langchain.com/oss/python/langgraph/graph-api">LangGraph 图</a>，因此所有子图持久化概念都直接适用。如果你使用原生 LangGraph <code>StateGraph</code> 进行构建，相同的模式和配置选项也适用——详情参见 <a href="https://docs.langchain.com/oss/python/langgraph/graph-api">Graph API</a>。
+</blockquote>
+
+<h3 id="stateful">有状态</h3>
+
+<p>有状态子图继承父图的 checkpointer，这使得<a href="https://docs.langchain.com/oss/python/langgraph/interrupts">中断</a>、<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a>和状态检查成为可能。两种有状态模式的区别在于状态保留的时长。</p>
+
+<h4 id="per-invocation-default">按调用（默认）</h4>
+
+<blockquote class="tip">
+  <strong>提示：</strong>这是大多数应用的推荐模式，包括<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体</a>系统中子智能体作为工具被调用的场景。它支持<a href="https://docs.langchain.com/oss/python/langgraph/interrupts">中断</a>、<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a>和并行调用，同时保持每次调用的隔离性。
+</blockquote>
+
+<p>当每次对子图的调用都是独立的、子智能体不需要记住之前调用的内容时，使用按调用持久化。这是最常见的模式，尤其是在<a href="https://docs.langchain.com/oss/python/langchain/multi-agent">多智能体</a>系统中子智能体处理一次性请求的场景。</p>
+
+<p>省略 <code>checkpointer</code> 或将其设置为 <code>None</code>。每次调用重新开始，但在单次调用内，子图继承父图的 checkpointer 并可使用 <code>interrupt()</code> 暂停和恢复。</p>
+
+<p>以下示例使用两个子智能体（水果专家、蔬菜专家）作为外部智能体的工具：</p>
+
+<pre><code>from langchain.agents import create_agent
+from langchain.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command, interrupt
+
+@tool
+def fruit_info(fruit_name: str) -> str:
+    """查询水果信息。"""
+    return f"Info about {fruit_name}"
+
+@tool
+def veggie_info(veggie_name: str) -> str:
+    """查询蔬菜信息。"""
+    return f"Info about {veggie_name}"
+
+# 子智能体 - 未设置 checkpointer（继承父图）
+fruit_agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[fruit_info],
+    prompt="You are a fruit expert. Use the fruit_info tool. Respond in one sentence.",
+)
+
+veggie_agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[veggie_info],
+    prompt="You are a veggie expert. Use the veggie_info tool. Respond in one sentence.",
+)
+
+# 将子智能体包装为外部智能体的工具
+@tool
+def ask_fruit_expert(question: str) -> str:
+    """询问水果专家。所有水果相关问题都使用此工具。"""
+    response = fruit_agent.invoke(
+        {"messages": [{"role": "user", "content": question}]},
+    )
+    return response["messages"][-1].content
+
+@tool
+def ask_veggie_expert(question: str) -> str:
+    """询问蔬菜专家。所有蔬菜相关问题都使用此工具。"""
+    response = veggie_agent.invoke(
+        {"messages": [{"role": "user", "content": question}]},
+    )
+    return response["messages"][-1].content
+
+# 带有 checkpointer 的外部智能体
+agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[ask_fruit_expert, ask_veggie_expert],
+    prompt=(
+        "You have two experts: ask_fruit_expert and ask_veggie_expert. "
+        "ALWAYS delegate questions to the appropriate expert."
+    ),
+    checkpointer=MemorySaver(),
+)</code></pre>
+
+<p><strong>标签：中断</strong></p>
+
+<p>每次调用都可以使用 <code>interrupt()</code> 暂停和恢复。在工具函数中添加 <code>interrupt()</code> 以在继续之前需要用户批准：</p>
+
+<pre><code>@tool
+def fruit_info(fruit_name: str) -> str:
+    """查询水果信息。"""
+    interrupt("continue?")
+    return f"Info about {fruit_name}"</code></pre>
+
+<pre><code>from langgraph.types import Command
+
+config = {"configurable": {"thread_id": "1"}}
+
+# 流式事件 - 子智能体的工具调用 interrupt()
+stream = agent.stream_events(
+    {"messages": [{"role": "user", "content": "Tell me about apples"}]},
+    config=config,
+    version="v3",
+)
+output = stream.output  # 驱动流完成
+# stream.interrupts 包含待处理的中断（且 stream.interrupted 为 True）
+
+# 恢复 - 批准中断
+resumed = agent.stream_events(Command(resume=True), config=config, version="v3")
+final = resumed.output</code></pre>
+
+<p><strong>标签：多轮对话</strong></p>
+
+<p>每次调用都以全新的子智能体状态开始。子智能体不会记住之前的调用：</p>
+
+<pre><code>config = {"configurable": {"thread_id": "1"}}
+
+# 第一次调用
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Tell me about apples"}]},
+    config=config,
+)
+# 子智能体消息数量：4
+
+# 第二次调用 - 子智能体重新开始，不记得苹果的信息
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Now tell me about bananas"}]},
+    config=config,
+)
+# 子智能体消息数量：4（仍然全新！）</code></pre>
+
+<p><strong>标签：多次子图调用</strong></p>
+
+<p>对同一子图的多次调用不会产生冲突，因为每次调用都获得自己的检查点命名空间：</p>
+
+<pre><code>config = {"configurable": {"thread_id": "1"}}
+
+# LLM 同时调用 ask_fruit_expert 查询苹果和香蕉
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Tell me about apples and bananas"}]},
+    config=config,
+)
+# 子智能体消息数量：4（苹果 - 全新）
+# 子智能体消息数量：4（香蕉 - 全新）</code></pre>
+
+<h4 id="per-thread">按线程</h4>
+
+<p>当子智能体需要记住之前的交互时，使用按线程持久化。例如，一个在多次交流中积累上下文的研究助手，或者一个跟踪已编辑文件的编码助手。子智能体的对话历史和数据在同一线程的调用之间累积。每次调用从上次结束处继续。</p>
+
+<p>使用 <code>checkpointer=True</code> 编译以启用此行为。</p>
+
+<blockquote class="warning">
+  <strong>警告：</strong>按线程子图不支持并行工具调用。当 LLM 可以将按线程子智能体作为工具使用时，它可能会尝试并行调用该工具多次。这会导致检查点冲突，因为两个调用会写入同一命名空间。
+</blockquote>
+
+<p>以下示例使用 <code>checkpointer=True</code> 编译的水果专家子智能体：</p>
+
+<pre><code>from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
+from langchain.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command, interrupt
+
+@tool
+def fruit_info(fruit_name: str) -> str:
+    """查询水果信息。"""
+    return f"Info about {fruit_name}"
+
+# 使用 checkpointer=True 的子智能体以实现持久状态
+fruit_agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[fruit_info],
+    prompt="You are a fruit expert. Use the fruit_info tool. Respond in one sentence.",
+    checkpointer=True,
+)
+
+# 将子智能体包装为外部智能体的工具
+@tool
+def ask_fruit_expert(question: str) -> str:
+    """询问水果专家。所有水果相关问题都使用此工具。"""
+    response = fruit_agent.invoke(
+        {"messages": [{"role": "user", "content": question}]},
+    )
+    return response["messages"][-1].content
+
+# 带有 checkpointer 的外部智能体
+# 使用 ToolCallLimitMiddleware 防止对按线程子智能体的并行调用，
+# 因为这会导致检查点冲突。
+agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[ask_fruit_expert],
+    prompt="You have a fruit expert. ALWAYS delegate fruit questions to ask_fruit_expert.",
+    middleware=[
+        ToolCallLimitMiddleware(tool_name="ask_fruit_expert", run_limit=1),
+    ],
+    checkpointer=MemorySaver(),
+)</code></pre>
+
+<p><strong>标签：中断</strong></p>
+
+<p>按线程子智能体与按调用模式一样支持 <code>interrupt()</code>。在工具函数中添加 <code>interrupt()</code> 以需要用户批准：</p>
+
+<pre><code>@tool
+def fruit_info(fruit_name: str) -> str:
+    """查询水果信息。"""
+    interrupt("continue?")
+    return f"Info about {fruit_name}"</code></pre>
+
+<pre><code>from langgraph.types import Command
+
+config = {"configurable": {"thread_id": "1"}}
+
+# 流式事件 - 子智能体的工具调用 interrupt()
+stream = agent.stream_events(
+    {"messages": [{"role": "user", "content": "Tell me about apples"}]},
+    config=config,
+    version="v3",
+)
+output = stream.output  # 驱动流完成
+# stream.interrupts 包含待处理的中断（且 stream.interrupted 为 True）
+
+# 恢复 - 批准中断
+resumed = agent.stream_events(Command(resume=True), config=config, version="v3")
+final = resumed.output</code></pre>
+
+<p><strong>标签：多轮对话</strong></p>
+
+<p>状态在调用之间累积——子智能体会记住过去的对话：</p>
+
+<pre><code>config = {"configurable": {"thread_id": "1"}}
+
+# 第一次调用
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Tell me about apples"}]},
+    config=config,
+)
+# 子智能体消息数量：4
+
+# 第二次调用 - 子智能体记得苹果的对话
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Now tell me about bananas"}]},
+    config=config,
+)
+# 子智能体消息数量：8（已累积！）</code></pre>
+
+<p><strong>标签：多次子图调用</strong></p>
+
+<p>当你有多个<strong>不同的</strong>按线程子图时，每个子图都需要自己的存储空间，以避免检查点互相覆盖。这称为<strong>命名空间隔离</strong>。</p>
+
+<p>如果你<a href="#call-a-subgraph-inside-a-node">在节点内调用子图</a>，LangGraph 会根据调用顺序分配命名空间。为避免这种情况，请将每个子智能体包装在具有唯一节点名称的独立 <code>StateGraph</code> 中：</p>
+
+<pre><code>from langgraph.graph import MessagesState, StateGraph
+
+def create_sub_agent(model, *, name, **kwargs):
+    """使用唯一节点名称包装智能体以实现命名空间隔离。"""
+    agent = create_agent(model=model, name=name, **kwargs)
+    return (
+        StateGraph(MessagesState)
+        .add_node(name, agent)  # 唯一名称 -> 稳定命名空间
+        .add_edge("__start__", name)
+        .compile()
+    )
+
+fruit_agent = create_sub_agent(
+    "gpt-5.4-mini", name="fruit_agent",
+    tools=[fruit_info], prompt="...", checkpointer=True,
+)
+veggie_agent = create_sub_agent(
+    "gpt-5.4-mini", name="veggie_agent",
+    tools=[veggie_info], prompt="...", checkpointer=True,
+)
+
+config = {"configurable": {"thread_id": "1"}}
+
+# 第一次调用 - LLM 同时调用水果和蔬菜专家
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Tell me about cherries and broccoli"}]},
+    config=config,
+)
+# 水果子智能体消息数量：4
+# 蔬菜子智能体消息数量：4
+
+# 第二次调用 - 两个智能体独立累积
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Now tell me about oranges and carrots"}]},
+    config=config,
+)
+# 水果子智能体消息数量：8（记得樱桃！）
+# 蔬菜子智能体消息数量：8（记得西兰花！）</code></pre>
+
+<p><a href="#add-a-subgraph-as-a-node">作为节点添加的</a>子图已经自动获得基于名称的命名空间，因此不需要此包装器。</p>
+
+<h3 id="stateless">无状态</h3>
+
+<p>当你希望像普通函数调用一样运行子智能体、不产生检查点开销时使用此模式。子图无法暂停/恢复，也不能受益于<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久执行</a>。使用 <code>checkpointer=False</code> 编译。</p>
+
+<blockquote class="warning">
+  <strong>警告：</strong>没有检查点，子图就没有持久执行。如果进程在运行中途崩溃，子图无法恢复，必须从头重新运行。
+</blockquote>
+
+<pre><code>subgraph_builder = StateGraph(...)
+subgraph = subgraph_builder.compile(checkpointer=False)</code></pre>
+
+<h3 id="checkpointer-reference">Checkpointer 参考</h3>
+
+<p>通过 <code>.compile()</code> 上的 <code>checkpointer</code> 参数控制子图持久化：</p>
+
+<pre><code>subgraph = builder.compile(checkpointer=False)  # 或 True / None</code></pre>
+
+<table>
+  <thead>
+    <tr>
+      <th>特性</th>
+      <th>按调用（默认）</th>
+      <th>按线程</th>
+      <th>无状态</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>checkpointer=</code></td>
+      <td><code>None</code></td>
+      <td><code>True</code></td>
+      <td><code>False</code></td>
+    </tr>
+    <tr>
+      <td>中断（HITL）</td>
+      <td>支持</td>
+      <td>支持</td>
+      <td>不支持</td>
+    </tr>
+    <tr>
+      <td>多轮记忆</td>
+      <td>不支持</td>
+      <td>支持</td>
+      <td>不支持</td>
+    </tr>
+    <tr>
+      <td>多次调用（不同子图）</td>
+      <td>支持</td>
+      <td>注意</td>
+      <td>支持</td>
+    </tr>
+    <tr>
+      <td>多次调用（同一子图）</td>
+      <td>支持</td>
+      <td>不支持</td>
+      <td>支持</td>
+    </tr>
+    <tr>
+      <td>状态检查</td>
+      <td>注意</td>
+      <td>支持</td>
+      <td>不支持</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li><strong>中断（HITL）</strong>：子图可以使用 <a href="https://docs.langchain.com/oss/python/langgraph/interrupts">interrupt()</a> 暂停执行并等待用户输入，然后从中断处恢复。</li>
+  <li><strong>多轮记忆</strong>：子图在同一<a href="https://docs.langchain.com/oss/python/langgraph/checkpointers#threads">线程</a>内的多次调用之间保留其状态。每次调用从上次结束处继续，而非重新开始。</li>
+  <li><strong>多次调用（不同子图）</strong>：可以在单个节点内调用多个不同的子图实例，而不会产生检查点命名空间冲突。</li>
+  <li><strong>多次调用（同一子图）</strong>：同一子图实例可以在单个节点内被多次调用。使用有状态持久化时，这些调用会写入同一检查点命名空间并产生冲突——应使用按调用持久化。</li>
+  <li><strong>状态检查</strong>：子图的状态可通过 <code>get_state(config, subgraphs=True)</code> 用于调试和监控。</li>
+</ul>
+
+<h2 id="view-subgraph-state">查看子图状态</h2>
+
+<p>启用<a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a>后，可以使用 subgraphs 选项检查子图状态。使用<a href="#stateless">无状态</a>检查点（<code>checkpointer=False</code>）时，不会保存子图检查点，因此子图状态不可用。</p>
+
+<blockquote>
+  <strong>注意：</strong>查看子图状态要求 LangGraph 能够<strong>静态发现</strong>子图——即它已被<a href="#add-a-subgraph-as-a-node">作为节点添加</a>或<a href="#call-a-subgraph-inside-a-node">在节点内调用</a>。当子图在<a href="https://docs.langchain.com/oss/python/langchain/tools">工具</a>函数或其他间接方式中被调用时，此功能不起作用。无论嵌套层级如何，中断仍会传播到顶层图。
+</blockquote>
+
+<p><strong>标签：按调用</strong></p>
+
+<p>返回<strong>仅当前调用</strong>的子图状态。每次调用重新开始。</p>
+
+<pre><code>from langgraph.graph import START, StateGraph
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt, Command
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    foo: str
+
+# 子图
+def subgraph_node_1(state: State):
+    value = interrupt("Provide value:")
+    return {"foo": state["foo"] + value}
+
+subgraph_builder = StateGraph(State)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph = subgraph_builder.compile()  # 继承父图 checkpointer
+
+# 父图
+builder = StateGraph(State)
+builder.add_node("node_1", subgraph)
+builder.add_edge(START, "node_1")
+
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+
+config = {"configurable": {"thread_id": "1"}}
+
+graph.invoke({"foo": ""}, config)
+
+# 查看当前调用的子图状态
+subgraph_state = graph.get_state(config, subgraphs=True).tasks[0].state
+
+# 恢复子图
+graph.invoke(Command(resume="bar"), config)</code></pre>
+
+<p><strong>标签：按线程</strong></p>
+
+<p>返回此线程上所有调用的<strong>累积</strong>子图状态。</p>
+
+<pre><code>from langgraph.graph import START, StateGraph, MessagesState
+from langgraph.checkpoint.memory import MemorySaver
+
+# 具有自身持久状态的子图
+subgraph_builder = StateGraph(MessagesState)
+# ... 添加节点和边
+subgraph = subgraph_builder.compile(checkpointer=True)
+
+# 父图
+builder = StateGraph(MessagesState)
+builder.add_node("agent", subgraph)
+builder.add_edge(START, "agent")
+
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+
+config = {"configurable": {"thread_id": "1"}}
+
+graph.invoke({"messages": [{"role": "user", "content": "hi"}]}, config)
+graph.invoke({"messages": [{"role": "user", "content": "what did I say?"}]}, config)
+
+# 查看累积的子图状态（包含两次调用的消息）
+subgraph_state = graph.get_state(config, subgraphs=True).tasks[0].state</code></pre>
+
+<h2 id="stream-subgraph-outputs">流式输出子图</h2>
+
+<p>要观察嵌套图执行，推荐使用<a href="https://docs.langchain.com/oss/python/langgraph/event-streaming">事件流</a>：<code>stream.subgraphs</code> 投影会发现每个嵌套运行并暴露其 <code>path</code>、<code>messages</code> 和 <code>values</code>，无需解析命名空间字符串。</p>
+
+<pre><code>stream = graph.stream_events({"foo": "foo"}, version="v3")
+
+for subgraph in stream.subgraphs:
+    print(subgraph.graph_name, subgraph.path)
+
+    for snapshot in subgraph.values:
+        print(subgraph.path, snapshot)</code></pre>
+
+<p>如果需要原始协议事件，直接迭代流并根据 <code>event["method"]</code> 和 <code>event["params"]["namespace"]</code> 进行过滤：</p>
+
+<pre><code>stream = graph.stream_events({"foo": "foo"}, version="v3")
+for event in stream:
+    if event["method"] == "updates":
+        print(event["params"]["namespace"], event["params"]["data"])</code></pre>
+
+<details>
+<summary>从子图流式输出</summary>
+
+<pre><code>from typing_extensions import TypedDict
+from langgraph.graph.state import StateGraph, START
+
+# 定义子图
+class SubgraphState(TypedDict):
+    foo: str
+    bar: str
+
+def subgraph_node_1(state: SubgraphState):
+    return {"bar": "bar"}
+
+def subgraph_node_2(state: SubgraphState):
+    # 注意：此节点使用了仅在子图中可用的状态键（'bar'）
+    # 并对共享状态键（'foo'）发送更新
+    return {"foo": state["foo"] + state["bar"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_node(subgraph_node_2)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph = subgraph_builder.compile()
+
+# 定义父图
+class ParentState(TypedDict):
+    foo: str
+
+def node_1(state: ParentState):
+    return {"foo": "hi! " + state["foo"]}
+
+builder = StateGraph(ParentState)
+builder.add_node("node_1", node_1)
+builder.add_node("node_2", subgraph)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+graph = builder.compile()
+
+stream = graph.stream_events({"foo": "foo"}, version="v3")
+for event in stream:
+    if event["method"] == "updates":
+        print(event["params"]["namespace"], event["params"]["data"])</code></pre>
+
+<pre><code>[] {'node_1': {'foo': 'hi! foo'}}
+['node_2:e58e5673-a661-ebb0-70d4-e298a7fc28b7'] {'subgraph_node_1': {'bar': 'bar'}}
+['node_2:e58e5673-a661-ebb0-70d4-e298a7fc28b7'] {'subgraph_node_2': {'foo': 'hi! foobar'}}
+[] {'node_2': {'foo': 'hi! foobar'}}</code></pre>
+
+</details>
+
+<hr>
+
+<div class="page-footer">
+  <p>将这些文档通过 MCP 连接到 Claude、VSCode 等工具以获取实时回答：<a href="https://docs.langchain.com/use-these-docs">Connect these docs</a></p>
+  <p><a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/use-subgraphs.mdx">在 GitHub 上编辑此页面</a> | <a href="https://github.com/langchain-ai/docs/issues/new/choose">提交问题</a></p>
+</div>
+
+</div><!-- /content-area -->
+</div><!-- /page-wrapper -->
+
+<script>
+// Scroll-highlight TOC
+(function() {
+  const tocLinks = document.querySelectorAll('.toc a');
+  const headings = [];
+
+  tocLinks.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) headings.push({ id, el, link });
+  });
+
+  function update() {
+    let current = null;
+    const scrollY = window.scrollY + 80;
+
+    for (let i = headings.length - 1; i >= 0; i--) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        current = headings[i];
+        break;
+      }
+    }
+
+    tocLinks.forEach(link => link.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+</script>
+
+</body>
+</html>

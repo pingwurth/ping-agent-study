@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加记忆 - LangGraph</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+            line-height: 1.8;
+            color: #1a1a2e;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: center;
+        }
+        .content {
+            max-width: 820px;
+            padding: 2rem 2.5rem;
+            flex: 1;
+            min-width: 0;
+        }
+        .toc {
+            position: sticky;
+            top: 2rem;
+            width: 240px;
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
+            padding: 1.5rem 1rem 1.5rem 1.5rem;
+            flex-shrink: 0;
+            margin-left: 2rem;
+            border-left: 1px solid #e2e6ea;
+            align-self: flex-start;
+        }
+        .toc-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #8892a4;
+            margin-bottom: 0.8rem;
+        }
+        .toc ul { list-style: none; margin: 0; padding: 0; }
+        .toc li { margin-bottom: 0.15rem; }
+        .toc a {
+            display: block;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.85rem;
+            color: #6b7280;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            border-left: 2px solid transparent;
+            margin-left: -1px;
+        }
+        .toc a:hover { color: #4a6cf7; background: #f0f4ff; }
+        .toc a.active { color: #4a6cf7; font-weight: 600; background: #eef2ff; border-left-color: #4a6cf7; }
+        .toc a.indent { padding-left: 1.2rem; font-size: 0.8rem; }
+        @media (max-width: 1100px) {
+            .toc { display: none; }
+            .content { max-width: 100%; padding: 1.5rem; }
+        }
+        h1 {
+            font-size: 2.4rem;
+            color: #0f0f23;
+            margin-bottom: 1rem;
+            border-bottom: 3px solid #4a6cf7;
+            padding-bottom: 0.5rem;
+        }
+        h2 {
+            font-size: 1.6rem;
+            color: #16213e;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            border-left: 4px solid #4a6cf7;
+            scroll-margin-top: 1.5rem;
+        }
+        h3 {
+            font-size: 1.25rem;
+            color: #333;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            scroll-margin-top: 1.5rem;
+        }
+        h4 { font-size: 1.1rem; color: #444; margin-top: 1.2rem; margin-bottom: 0.4rem; }
+        h5 { font-size: 1rem; color: #555; margin-top: 1rem; margin-bottom: 0.3rem; }
+        p { margin-bottom: 1rem; }
+        blockquote {
+            background: #eef2ff;
+            border-left: 4px solid #4a6cf7;
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        blockquote p { margin-bottom: 0; }
+        aside {
+            background: #fff8e1;
+            border-left: 4px solid #f59e0b;
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        aside p { margin-bottom: 0.5rem; }
+        aside p:last-child { margin-bottom: 0; }
+        code {
+            background: #f1f3f5;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: "Fira Code", "Consolas", monospace;
+        }
+        pre {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            padding: 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        pre code { background: none; padding: 0; color: inherit; }
+        ul, ol { margin: 1rem 0 1rem 2rem; }
+        li { margin-bottom: 0.5rem; }
+        a { color: #4a6cf7; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        strong { color: #0f0f23; }
+        details {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+        }
+        summary {
+            font-weight: 600;
+            cursor: pointer;
+            color: #4a6cf7;
+            margin-bottom: 0.5rem;
+        }
+        hr { border: none; border-top: 1px solid #dee2e6; margin: 2rem 0; }
+        img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+
+<nav class="toc" aria-label="章节导航">
+    <div class="toc-title">本页目录</div>
+    <ul>
+        <li><a href="#short-term-memory">添加短期记忆</a></li>
+        <li><a href="#use-in-production" class="indent">在生产环境使用</a></li>
+        <li><a href="#use-in-subgraphs" class="indent">在子图中使用</a></li>
+        <li><a href="#long-term-memory">添加长期记忆</a></li>
+        <li><a href="#access-store" class="indent">在节点中访问存储</a></li>
+        <li><a href="#ltm-production" class="indent">在生产环境使用</a></li>
+        <li><a href="#semantic-search" class="indent">使用语义搜索</a></li>
+        <li><a href="#manage-short-term">管理短期记忆</a></li>
+        <li><a href="#trim-messages" class="indent">裁剪消息</a></li>
+        <li><a href="#delete-messages" class="indent">删除消息</a></li>
+        <li><a href="#summarize-messages" class="indent">总结消息</a></li>
+        <li><a href="#manage-checkpoints" class="indent">管理检查点</a></li>
+        <li><a href="#db-management">数据库管理</a></li>
+    </ul>
+</nav>
+
+<div class="content">
+
+<h1>记忆</h1>
+
+<p>AI 应用需要记忆来在多次交互之间共享上下文。在 LangGraph 中，您可以添加两种类型的记忆：</p>
+
+<ul>
+    <li><strong>添加短期记忆</strong>作为智能体状态的一部分，以启用多轮对话。</li>
+    <li><strong>添加长期记忆</strong>以在会话之间存储用户特定或应用级别的数据。</li>
+</ul>
+
+<h2 id="short-term-memory">添加短期记忆</h2>
+
+<p><strong>短期</strong>记忆（线程级持久化）使智能体能够跟踪多轮对话。要添加短期记忆：</p>
+
+<pre><code>from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph
+
+checkpointer = InMemorySaver()
+
+builder = StateGraph(...)
+graph = builder.compile(checkpointer=checkpointer)
+
+graph.invoke(
+    {"messages": [{"role": "user", "content": "你好！我是 Bob"}]},
+    {"configurable": {"thread_id": "1"}},
+)</code></pre>
+
+<h3 id="use-in-production">在生产环境使用</h3>
+
+<p>在生产环境中，使用数据库支持的检查点：</p>
+
+<pre><code>from langgraph.checkpoint.postgres import PostgresSaver
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    builder = StateGraph(...)
+    graph = builder.compile(checkpointer=checkpointer)</code></pre>
+
+<details>
+    <summary>示例：使用 Postgres 检查点</summary>
+    <pre><code>pip install -U "psycopg[binary,pool]" langgraph langgraph-checkpoint-postgres</code></pre>
+    <p>首次使用 Postgres 检查点时，您需要调用 <code>checkpointer.setup()</code>。</p>
+
+    <h4>同步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.postgres import PostgresSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)</code></pre>
+
+    <h4>异步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    async def call_model(state: MessagesState):
+        response = await model.ainvoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)</code></pre>
+</details>
+
+<details>
+    <summary>示例：使用 MongoDB 检查点</summary>
+    <pre><code>pip install -U pymongo langgraph langgraph-checkpoint-mongodb</code></pre>
+    <p>使用 MongoDB 检查点需要一个 MongoDB 集群。</p>
+
+    <h4>同步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.mongodb import MongoDBSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+MONGODB_URI = "localhost:27017"
+with MongoDBSaver.from_conn_string(MONGODB_URI) as checkpointer:
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)</code></pre>
+
+    <h4>异步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+MONGODB_URI = "localhost:27017"
+async with AsyncMongoDBSaver.from_conn_string(MONGODB_URI) as checkpointer:
+    async def call_model(state: MessagesState):
+        response = await model.ainvoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)</code></pre>
+</details>
+
+<details>
+    <summary>示例：使用 Redis 检查点</summary>
+    <pre><code>pip install -U langgraph langgraph-checkpoint-redis</code></pre>
+    <p>首次使用 Redis 检查点时，您需要调用 <code>checkpointer.setup()</code>。</p>
+
+    <h4>同步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.redis import RedisSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "redis://localhost:6379"
+with RedisSaver.from_conn_string(DB_URI) as checkpointer:
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)</code></pre>
+
+    <h4>异步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "redis://localhost:6379"
+async with AsyncRedisSaver.from_conn_string(DB_URI) as checkpointer:
+    async def call_model(state: MessagesState):
+        response = await model.ainvoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)</code></pre>
+</details>
+
+<details>
+    <summary>示例：使用 Oracle 检查点</summary>
+    <pre><code>pip install -U langgraph langgraph-oracledb</code></pre>
+    <p>使用 Oracle 检查点需要一个 Oracle AI 数据库实例。</p>
+    <p>首次使用 Oracle 检查点时，您需要调用 <code>checkpointer.setup()</code>。</p>
+
+    <h4>同步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph_oracledb.checkpoint.oracle import OracleSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "user/password@localhost:1521/FREEPDB1"
+with OracleSaver.from_conn_string(DB_URI) as checkpointer:
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)
+
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        print(snapshot)</code></pre>
+
+    <h4>异步</h4>
+    <pre><code>from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph_oracledb.checkpoint.oracle import AsyncOracleSaver
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+DB_URI = "user/password@localhost:1521/FREEPDB1"
+async with AsyncOracleSaver.from_conn_string(DB_URI) as checkpointer:
+    async def call_model(state: MessagesState):
+        response = await model.ainvoke(state["messages"])
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)
+
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)</code></pre>
+</details>
+
+<h3 id="use-in-subgraphs">在子图中使用</h3>
+
+<p>如果您的图包含子图，您只需要在编译父图时提供检查点。LangGraph 会自动将检查点传播到子图。</p>
+
+<pre><code>from langgraph.graph import START, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
+from typing import TypedDict
+
+class State(TypedDict):
+    foo: str
+
+# 子图
+def subgraph_node_1(state: State):
+    return {"foo": state["foo"] + "bar"}
+
+subgraph_builder = StateGraph(State)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph = subgraph_builder.compile()
+
+# 父图
+builder = StateGraph(State)
+builder.add_node("node_1", subgraph)
+builder.add_edge(START, "node_1")
+
+checkpointer = InMemorySaver()
+graph = builder.compile(checkpointer=checkpointer)</code></pre>
+
+<p>您可以配置子图特定的检查点行为，包括中断支持和有状态的续接。</p>
+
+<pre><code>subgraph_builder = StateGraph(...)
+subgraph = subgraph_builder.compile(checkpointer=True)</code></pre>
+
+<h2 id="long-term-memory">添加长期记忆</h2>
+
+<p>使用长期记忆在对话之间存储用户特定或应用特定的数据。</p>
+
+<pre><code>from langgraph.store.memory import InMemoryStore
+from langgraph.graph import StateGraph
+
+store = InMemoryStore()
+
+builder = StateGraph(...)
+graph = builder.compile(store=store)</code></pre>
+
+<h3 id="access-store">在节点中访问存储</h3>
+
+<p>一旦您使用存储编译了图，LangGraph 会自动将存储注入到您的节点函数中。推荐通过 <code>Runtime</code> 对象访问存储。</p>
+
+<pre><code>from dataclasses import dataclass
+from langgraph.runtime import Runtime
+from langgraph.graph import StateGraph, MessagesState, START
+import uuid
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(state: MessagesState, runtime: Runtime[Context]):
+    user_id = runtime.context.user_id
+    namespace = (user_id, "memories")
+
+    # 搜索相关记忆
+    memories = await runtime.store.asearch(
+        namespace, query=state["messages"][-1].content, limit=3
+    )
+    info = "\n".join([d.value["data"] for d in memories])
+
+    # ... 在模型调用中使用记忆
+
+    # 存储新记忆
+    await runtime.store.aput(
+        namespace, str(uuid.uuid4()), {"data": "用户偏好深色模式"}
+    )
+
+builder = StateGraph(MessagesState, context_schema=Context)
+builder.add_node(call_model)
+builder.add_edge(START, "call_model")
+graph = builder.compile(store=store)
+
+# 在调用时传递上下文
+graph.invoke(
+    {"messages": [{"role": "user", "content": "你好"}]},
+    {"configurable": {"thread_id": "1"}},
+    context=Context(user_id="1"),
+)</code></pre>
+
+<h3 id="ltm-production">在生产环境使用</h3>
+
+<p>在生产环境中，使用数据库支持的存储：</p>
+
+<pre><code>from langgraph.store.postgres import PostgresStore
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+with PostgresStore.from_conn_string(DB_URI) as store:
+    builder = StateGraph(...)
+    graph = builder.compile(store=store)</code></pre>
+
+<details>
+    <summary>示例：使用 Postgres 存储</summary>
+    <pre><code>pip install -U "psycopg[binary,pool]" langgraph langgraph-checkpoint-postgres</code></pre>
+    <p>首次使用 Postgres 存储时，您需要调用 <code>store.setup()</code>。</p>
+
+    <h4>异步</h4>
+    <pre><code>from dataclasses import dataclass
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
+from langgraph.runtime import Runtime
+import uuid
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(
+    state: MessagesState,
+    runtime: Runtime[Context],
+):
+    user_id = runtime.context.user_id
+    namespace = ("memories", user_id)
+    memories = await runtime.store.asearch(namespace, query=str(state["messages"][-1].content))
+    info = "\n".join([d.value["data"] for d in memories])
+    system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+    # 如果用户要求模型记住，则存储新记忆
+    last_message = state["messages"][-1]
+    if "记住" in last_message.content.lower():
+        memory = "用户名是 Bob"
+        await runtime.store.aput(namespace, str(uuid.uuid4()), {"data": memory})
+
+    response = await model.ainvoke(
+        [{"role": "system", "content": system_msg}] + state["messages"]
+    )
+    return {"messages": response}
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+
+async with (
+    AsyncPostgresStore.from_conn_string(DB_URI) as store,
+    AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    builder = StateGraph(MessagesState, context_schema=Context)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)
+
+    config = {"configurable": {"thread_id": "2"}}
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    async for message in stream.messages:
+        async for token in message.text:
+            print(token, end="", flush=True)</code></pre>
+
+    <h4>同步</h4>
+    <pre><code>from dataclasses import dataclass
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
+from langgraph.runtime import Runtime
+import uuid
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+@dataclass
+class Context:
+    user_id: str
+
+def call_model(
+    state: MessagesState,
+    runtime: Runtime[Context],
+):
+    user_id = runtime.context.user_id
+    namespace = ("memories", user_id)
+    memories = runtime.store.search(namespace, query=str(state["messages"][-1].content))
+    info = "\n".join([d.value["data"] for d in memories])
+    system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+    last_message = state["messages"][-1]
+    if "记住" in last_message.content.lower():
+        memory = "用户名是 Bob"
+        runtime.store.put(namespace, str(uuid.uuid4()), {"data": memory})
+
+    response = model.invoke(
+        [{"role": "system", "content": system_msg}] + state["messages"]
+    )
+    return {"messages": response}
+
+DB_URI = "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+
+with (
+    PostgresStore.from_conn_string(DB_URI) as store,
+    PostgresSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    builder = StateGraph(MessagesState, context_schema=Context)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    for snapshot in stream.values:
+        print(snapshot)
+
+    config = {"configurable": {"thread_id": "2"}}
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    for snapshot in stream.values:
+        print(snapshot)</code></pre>
+</details>
+
+<details>
+    <summary>示例：使用 MongoDB 存储</summary>
+    <p>（内容待补充。）</p>
+</details>
+
+<details>
+    <summary>示例：使用 Redis 存储</summary>
+    <pre><code>pip install -U langgraph langgraph-checkpoint-redis</code></pre>
+    <p>首次使用 Redis 存储时，您需要调用 <code>store.setup()</code>。</p>
+
+    <h4>异步</h4>
+    <pre><code>from dataclasses import dataclass
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+from langgraph.store.redis.aio import AsyncRedisStore
+from langgraph.runtime import Runtime
+import uuid
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(
+    state: MessagesState,
+    runtime: Runtime[Context],
+):
+    user_id = runtime.context.user_id
+    namespace = ("memories", user_id)
+    memories = await runtime.store.asearch(namespace, query=str(state["messages"][-1].content))
+    info = "\n".join([d.value["data"] for d in memories])
+    system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+    last_message = state["messages"][-1]
+    if "记住" in last_message.content.lower():
+        memory = "用户名是 Bob"
+        await runtime.store.aput(namespace, str(uuid.uuid4()), {"data": memory})
+
+    response = await model.ainvoke(
+        [{"role": "system", "content": system_msg}] + state["messages"]
+    )
+    return {"messages": response}
+
+DB_URI = "redis://localhost:6379"
+
+async with (
+    AsyncRedisStore.from_conn_string(DB_URI) as store,
+    AsyncRedisSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    builder = StateGraph(MessagesState, context_schema=Context)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    async for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()
+
+    config = {"configurable": {"thread_id": "2"}}
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    async for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()</code></pre>
+
+    <h4>同步</h4>
+    <pre><code>from dataclasses import dataclass
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.checkpoint.redis import RedisSaver
+from langgraph.store.redis import RedisStore
+from langgraph.runtime import Runtime
+import uuid
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+
+@dataclass
+class Context:
+    user_id: str
+
+def call_model(
+    state: MessagesState,
+    runtime: Runtime[Context],
+):
+    user_id = runtime.context.user_id
+    namespace = ("memories", user_id)
+    memories = runtime.store.search(namespace, query=str(state["messages"][-1].content))
+    info = "\n".join([d.value["data"] for d in memories])
+    system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+    last_message = state["messages"][-1]
+    if "记住" in last_message.content.lower():
+        memory = "用户名是 Bob"
+        runtime.store.put(namespace, str(uuid.uuid4()), {"data": memory})
+
+    response = model.invoke(
+        [{"role": "system", "content": system_msg}] + state["messages"]
+    )
+    return {"messages": response}
+
+DB_URI = "redis://localhost:6379"
+
+with (
+    RedisStore.from_conn_string(DB_URI) as store,
+    RedisSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    store.setup()
+    checkpointer.setup()
+
+    builder = StateGraph(MessagesState, context_schema=Context)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()
+
+    config = {"configurable": {"thread_id": "2"}}
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+        context=Context(user_id="1"),
+    )
+    for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()</code></pre>
+</details>
+
+<details>
+    <summary>示例：使用 Oracle 存储</summary>
+    <pre><code>pip install -U langgraph langgraph-oracledb langchain-openai</code></pre>
+    <p>使用 Oracle 存储需要一个 Oracle AI 数据库实例——用于语义搜索的向量索引需要 Oracle AI Vector Search。</p>
+    <p>首次使用 Oracle 存储和检查点时，您需要调用 <code>store.setup()</code> 和 <code>checkpointer.setup()</code>。</p>
+
+    <h4>同步</h4>
+    <pre><code>import uuid
+
+from langchain.chat_models import init_chat_model
+from langchain.embeddings import init_embeddings
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.store.base import BaseStore
+from langgraph_oracledb.checkpoint.oracle import OracleSaver
+from langgraph_oracledb.store.oracle import OracleStore
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+embeddings = init_embeddings("openai:text-embedding-3-small")
+
+DB_URI = "user/password@localhost:1521/FREEPDB1"
+
+with (
+    OracleStore.from_conn_string(
+        DB_URI,
+        index={"embed": embeddings, "dims": 1536},
+    ) as store,
+    OracleSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    store.setup()
+    checkpointer.setup()
+
+    def call_model(
+        state: MessagesState,
+        config: RunnableConfig,
+        *,
+        store: BaseStore,
+    ):
+        user_id = config["configurable"]["user_id"]
+        namespace = ("memories", user_id)
+        memories = store.search(namespace, query=str(state["messages"][-1].content))
+        info = "\n".join([d.value["data"] for d in memories])
+        system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+        last_message = state["messages"][-1]
+        if "记住" in last_message.content.lower():
+            memory = "用户名是 Bob"
+            store.put(namespace, str(uuid.uuid4()), {"data": memory})
+
+        response = model.invoke(
+            [{"role": "system", "content": system_msg}] + state["messages"]
+        )
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "1",
+            "user_id": "1",
+        }
+    }
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()
+
+    config = {
+        "configurable": {
+            "thread_id": "2",
+            "user_id": "1",
+        }
+    }
+    stream = graph.stream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()</code></pre>
+
+    <h4>异步</h4>
+    <pre><code>import uuid
+
+from langchain.chat_models import init_chat_model
+from langchain.embeddings import init_embeddings
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.store.base import BaseStore
+from langgraph_oracledb.checkpoint.oracle import AsyncOracleSaver
+from langgraph_oracledb.store.oracle import AsyncOracleStore
+
+model = init_chat_model(model="claude-haiku-4-5-20251001")
+embeddings = init_embeddings("openai:text-embedding-3-small")
+
+DB_URI = "user/password@localhost:1521/FREEPDB1"
+
+async with (
+    AsyncOracleStore.from_conn_string(
+        DB_URI,
+        index={"embed": embeddings, "dims": 1536},
+    ) as store,
+    AsyncOracleSaver.from_conn_string(DB_URI) as checkpointer,
+):
+    await store.setup()
+    await checkpointer.setup()
+
+    async def call_model(
+        state: MessagesState,
+        config: RunnableConfig,
+        *,
+        store: BaseStore,
+    ):
+        user_id = config["configurable"]["user_id"]
+        namespace = ("memories", user_id)
+        memories = await store.asearch(namespace, query=str(state["messages"][-1].content))
+        info = "\n".join([d.value["data"] for d in memories])
+        system_msg = f"你是一个与用户对话的有用助手。用户信息：{info}"
+
+        last_message = state["messages"][-1]
+        if "记住" in last_message.content.lower():
+            memory = "用户名是 Bob"
+            await store.aput(namespace, str(uuid.uuid4()), {"data": memory})
+
+        response = await model.ainvoke(
+            [{"role": "system", "content": system_msg}] + state["messages"]
+        )
+        return {"messages": response}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    builder.add_edge(START, "call_model")
+
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        store=store,
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "1",
+            "user_id": "1",
+        }
+    }
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "你好！记住：我叫 Bob"}]},
+        config,
+        version="v3",
+    )
+    async for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()
+
+    config = {
+        "configurable": {
+            "thread_id": "2",
+            "user_id": "1",
+        }
+    }
+    stream = await graph.astream_events(
+        {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+        config,
+        version="v3",
+    )
+    async for snapshot in stream.values:
+        snapshot["messages"][-1].pretty_print()</code></pre>
+</details>
+
+<h3 id="semantic-search">使用语义搜索</h3>
+
+<p>在图的记忆存储中启用语义搜索，让图智能体能够通过语义相似度搜索存储中的条目。</p>
+
+<pre><code>from langchain.embeddings import init_embeddings
+from langgraph.store.memory import InMemoryStore
+
+# 创建启用语义搜索的存储
+embeddings = init_embeddings("openai:text-embedding-3-small")
+store = InMemoryStore(
+    index={
+        "embed": embeddings,
+        "dims": 1536,
+    }
+)
+
+store.put(("user_123", "memories"), "1", {"text": "我喜欢披萨"})
+store.put(("user_123", "memories"), "2", {"text": "我是一名水管工"})
+
+items = store.search(
+    ("user_123", "memories"), query="我饿了", limit=1
+)</code></pre>
+
+<details>
+    <summary>带语义搜索的长期记忆</summary>
+    <pre><code>from langchain.embeddings import init_embeddings
+from langchain.chat_models import init_chat_model
+from langgraph.store.memory import InMemoryStore
+from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.runtime import Runtime
+
+model = init_chat_model("gpt-5.4-mini")
+
+# 创建启用语义搜索的存储
+embeddings = init_embeddings("openai:text-embedding-3-small")
+store = InMemoryStore(
+    index={
+        "embed": embeddings,
+        "dims": 1536,
+    }
+)
+
+store.put(("user_123", "memories"), "1", {"text": "我喜欢披萨"})
+store.put(("user_123", "memories"), "2", {"text": "我是一名水管工"})
+
+async def chat(state: MessagesState, runtime: Runtime):
+    # 基于用户最后一条消息进行搜索
+    items = await runtime.store.asearch(
+        ("user_123", "memories"), query=state["messages"][-1].content, limit=2
+    )
+    memories = "\n".join(item.value["text"] for item in items)
+    memories = f"## 用户记忆\n{memories}" if memories else ""
+    response = await model.ainvoke(
+        [
+            {"role": "system", "content": f"你是一个有用的助手。\n{memories}"},
+            *state["messages"],
+        ]
+    )
+    return {"messages": [response]}
+
+builder = StateGraph(MessagesState)
+builder.add_node(chat)
+builder.add_edge(START, "chat")
+graph = builder.compile(store=store)
+
+stream = await graph.astream_events(
+    {"messages": [{"role": "user", "content": "我饿了"}]},
+    version="v3",
+)
+async for message in stream.messages:
+    async for token in message.text:
+        print(token, end="", flush=True)</code></pre>
+</details>
+
+<h2 id="manage-short-term">管理短期记忆</h2>
+
+<p>启用短期记忆后，长对话可能会超出 LLM 的上下文窗口。常见的解决方案包括：</p>
+
+<ul>
+    <li><a href="#trim-messages">裁剪消息</a>：在调用 LLM 之前移除前 N 条或后 N 条消息</li>
+    <li><a href="#delete-messages">删除消息</a>：从 LangGraph 状态中永久删除消息</li>
+    <li><a href="#summarize-messages">总结消息</a>：总结早期消息并用总结替换它们</li>
+    <li><a href="#manage-checkpoints">管理检查点</a>：存储和检索消息历史</li>
+    <li>自定义策略（例如消息过滤等）</li>
+</ul>
+
+<p>这使智能体能够在不超出 LLM 上下文窗口的情况下跟踪对话。</p>
+
+<h3 id="trim-messages">裁剪消息</h3>
+
+<p>大多数 LLM 都有最大支持的上下文窗口（以 token 为单位）。一种决定何时截断消息的方法是计算消息历史中的 token 数量，并在接近该限制时进行截断。您可以使用裁剪消息工具，指定要保留的 token 数量以及处理边界的策略。</p>
+
+<p>要裁剪消息历史，使用 <code>trim_messages</code> 函数：</p>
+
+<pre><code>from langchain_core.messages.utils import (
+    trim_messages,
+    count_tokens_approximately
+)
+
+def call_model(state: MessagesState):
+    messages = trim_messages(
+        state["messages"],
+        strategy="last",
+        token_counter=count_tokens_approximately,
+        max_tokens=128,
+        start_on="human",
+        end_on=("human", "tool"),
+    )
+    response = model.invoke(messages)
+    return {"messages": [response]}
+
+builder = StateGraph(MessagesState)
+builder.add_node(call_model)
+...</code></pre>
+
+<details>
+    <summary>完整示例：裁剪消息</summary>
+    <pre><code>from langchain_core.messages.utils import (
+    trim_messages,
+    count_tokens_approximately
+)
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, START, MessagesState
+
+model = init_chat_model("claude-sonnet-4-6")
+summarization_model = model.bind(max_tokens=128)
+
+def call_model(state: MessagesState):
+    messages = trim_messages(
+        state["messages"],
+        strategy="last",
+        token_counter=count_tokens_approximately,
+        max_tokens=128,
+        start_on="human",
+        end_on=("human", "tool"),
+    )
+    response = model.invoke(messages)
+    return {"messages": [response]}
+
+checkpointer = InMemorySaver()
+builder = StateGraph(MessagesState)
+builder.add_node(call_model)
+builder.add_edge(START, "call_model")
+graph = builder.compile(checkpointer=checkpointer)
+
+config = {"configurable": {"thread_id": "1"}}
+graph.invoke({"messages": "你好，我叫 bob"}, config)
+graph.invoke({"messages": "写一首关于猫的短诗"}, config)
+graph.invoke({"messages": "现在为狗也写一首"}, config)
+final_response = graph.invoke({"messages": "我叫什么名字？"}, config)
+
+final_response["messages"][-1].pretty_print()</code></pre>
+    <pre><code>================================== Ai Message ==================================
+你叫 Bob，这是你一开始自我介绍时告诉我的。</code></pre>
+</details>
+
+<h3 id="delete-messages">删除消息</h3>
+
+<p>您可以从图状态中删除消息来管理消息历史。当您想要移除特定消息或清除整个消息历史时，这很有用。</p>
+
+<p>要从图状态中删除消息，可以使用 <code>RemoveMessage</code>。要使 <code>RemoveMessage</code> 工作，您需要使用带有 <code>add_messages</code> 归约器的状态键，如 <code>MessagesState</code>。</p>
+
+<p>要移除特定消息：</p>
+
+<pre><code>from langchain.messages import RemoveMessage
+
+def delete_messages(state):
+    messages = state["messages"]
+    if len(messages) > 2:
+        # 移除最早的消息
+        return {"messages": [RemoveMessage(id=m.id) for m in messages[:2]]}</code></pre>
+
+<p>要移除<strong>所有</strong>消息：</p>
+
+<pre><code>from langgraph.graph.message import REMOVE_ALL_MESSAGES
+
+def delete_messages(state):
+    return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}</code></pre>
+
+<aside>
+    <p>删除消息时，<strong>确保</strong>生成的消息历史是有效的。检查您使用的 LLM 提供商的限制。例如：</p>
+    <ul>
+        <li>一些提供商期望消息历史以 <code>user</code> 消息开头</li>
+        <li>大多数提供商要求带有工具调用的 <code>assistant</code> 消息后面跟相应的 <code>tool</code> 结果消息。</li>
+    </ul>
+</aside>
+
+<details>
+    <summary>完整示例：删除消息</summary>
+    <pre><code>from langchain.messages import RemoveMessage
+
+def delete_messages(state):
+    messages = state["messages"]
+    if len(messages) > 2:
+        # 移除最早的消息
+        return {"messages": [RemoveMessage(id=m.id) for m in messages[:2]]}
+
+def call_model(state: MessagesState):
+    response = model.invoke(state["messages"])
+    return {"messages": response}
+
+builder = StateGraph(MessagesState)
+builder.add_sequence([call_model, delete_messages])
+builder.add_edge(START, "call_model")
+
+checkpointer = InMemorySaver()
+app = builder.compile(checkpointer=checkpointer)
+
+stream = app.stream_events(
+    {"messages": [{"role": "user", "content": "你好！我是 bob"}]},
+    config,
+    version="v3"
+)
+for snapshot in stream.values:
+    print([(message.type, message.content) for message in snapshot["messages"]])
+
+stream = app.stream_events(
+    {"messages": [{"role": "user", "content": "我叫什么名字？"}]},
+    config,
+    version="v3"
+)
+for snapshot in stream.values:
+    print([(message.type, message.content) for message in snapshot["messages"]])</code></pre>
+    <pre><code>[('human', "你好！我是 bob")]
+[('human', "你好！我是 bob"), ('ai', '你好 Bob！今天过得怎么样？有什么我能帮你的吗？')]
+[('human', "你好！我是 bob"), ('ai', '你好 Bob！今天过得怎么样？有什么我能帮你的吗？'), ('human', "我叫什么名字？")]
+[('human', "你好！我是 bob"), ('ai', '你好 Bob！今天过得怎么样？有什么我能帮你的吗？'), ('human', "我叫什么名字？"), ('ai', '你叫 Bob.')]
+[('human', "我叫什么名字？"), ('ai', '你叫 Bob.')]</code></pre>
+</details>
+
+<h3 id="summarize-messages">总结消息</h3>
+
+<p>裁剪或删除消息的问题是，您可能会因削减消息队列而丢失信息。因此，一些应用受益于使用聊天模型总结消息历史的更复杂方法。</p>
+
+<img src="https://mintcdn.com/langchain-5e9cc07a/ybiAaBfoBvFquMDz/oss/images/summary.png?fit=max&auto=format&n=ybiAaBfoBvFquMDz&q=85&s=c8ed3facdccd4ef5c7e52902c72ba938" alt="总结图表，展示消息如何被压缩为摘要" width="609" height="242" />
+
+<p>提示和编排逻辑可用于总结消息历史。例如，在 LangGraph 中，您可以扩展 <code>MessagesState</code> 以包含 <code>summary</code> 键：</p>
+
+<pre><code>from langgraph.graph import MessagesState
+class State(MessagesState):
+    summary: str</code></pre>
+
+<p>然后，您可以生成聊天历史的总结，使用任何现有的总结作为下一个总结的上下文。当 <code>messages</code> 状态键中积累了若干消息后，可以调用这个 <code>summarize_conversation</code> 节点。</p>
+
+<pre><code>def summarize_conversation(state: State):
+    # 首先，获取现有的总结
+    summary = state.get("summary", "")
+
+    # 创建总结提示
+    if summary:
+        # 已有总结
+        summary_message = (
+            f"这是迄今为止对话的总结：{summary}\n\n"
+            "根据上面的新消息扩展总结："
+        )
+    else:
+        summary_message = "创建上面对话的总结："
+
+    # 将提示添加到历史中
+    messages = state["messages"] + [HumanMessage(content=summary_message)]
+    response = model.invoke(messages)
+
+    # 删除除最近2条消息外的所有消息
+    delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
+    return {"summary": response.content, "messages": delete_messages}</code></pre>
+
+<details>
+    <summary>完整示例：总结消息</summary>
+    <pre><code>from typing import Any, TypedDict
+
+from langchain.chat_models import init_chat_model
+from langchain.messages import AnyMessage
+from langchain_core.messages.utils import count_tokens_approximately
+from langgraph.graph import StateGraph, START, MessagesState
+from langgraph.checkpoint.memory import InMemorySaver
+from langmem.short_term import SummarizationNode, RunningSummary
+
+model = init_chat_model("claude-sonnet-4-6")
+summarization_model = model.bind(max_tokens=128)
+
+class State(MessagesState):
+    context: dict[str, RunningSummary]
+
+class LLMInputState(TypedDict):
+    summarized_messages: list[AnyMessage]
+    context: dict[str, RunningSummary]
+
+summarization_node = SummarizationNode(
+    token_counter=count_tokens_approximately,
+    model=summarization_model,
+    max_tokens=256,
+    max_tokens_before_summary=256,
+    max_summary_tokens=128,
+)
+
+def call_model(state: LLMInputState):
+    response = model.invoke(state["summarized_messages"])
+    return {"messages": [response]}
+
+checkpointer = InMemorySaver()
+builder = StateGraph(State)
+builder.add_node(call_model)
+builder.add_node("summarize", summarization_node)
+builder.add_edge(START, "summarize")
+builder.add_edge("summarize", "call_model")
+graph = builder.compile(checkpointer=checkpointer)
+
+# 调用图
+config = {"configurable": {"thread_id": "1"}}
+graph.invoke({"messages": "你好，我叫 bob"}, config)
+graph.invoke({"messages": "写一首关于猫的短诗"}, config)
+graph.invoke({"messages": "现在为狗也写一首"}, config)
+final_response = graph.invoke({"messages": "我叫什么名字？"}, config)
+
+final_response["messages"][-1].pretty_print()
+print("\n总结:", final_response["context"]["running_summary"].summary)</code></pre>
+    <p>我们在 <code>context</code> 字段中跟踪运行总结（<code>SummarizationNode</code> 需要）。私有输入状态将总结节点返回的消息与 <code>call_model</code> 节点隔离。</p>
+    <pre><code>================================== Ai Message ==================================
+从我们的对话中，我可以看到你自我介绍说你叫 Bob。那是我们开始交谈时你告诉我的名字。
+
+总结：在这次对话中，我认识了 Bob，然后他让我写一首关于猫的诗。我写了一首题为"猫的神秘"的诗，捕捉了猫优雅的动作、独立的天性以及它们与人类的特殊关系。Bob 然后要求我为狗写一首类似的诗，所以我写了"狗的欢乐"，突出了狗的忠诚、热情和深情的陪伴。两首诗都以类似风格写成，但强调了使每种宠物独特的不同特征。</code></pre>
+</details>
+
+<h3 id="manage-checkpoints">管理检查点</h3>
+
+<p>您可以查看和删除检查点存储的信息。</p>
+
+<h4 id="checkpoint">查看线程状态</h4>
+
+<h5>图/函数式 API</h5>
+<pre><code>config = {
+    "configurable": {
+        "thread_id": "1",
+        # 可选：提供特定检查点的 ID
+        # 否则显示最新检查点
+        # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
+    }
+}
+graph.get_state(config)</code></pre>
+
+<pre><code>StateSnapshot(
+    values={'messages': [HumanMessage(content="你好！我是 bob"), AIMessage(content='你好 Bob！今天过得怎么样？'), HumanMessage(content="我叫什么名字？"), AIMessage(content='你叫 Bob.')]}, next=(),
+    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
+    metadata={
+        'source': 'loop',
+        'writes': {'call_model': {'messages': AIMessage(content='你叫 Bob.')}},
+        'step': 4,
+        'parents': {},
+        'thread_id': '1'
+    },
+    created_at='2025-05-05T16:01:24.680462+00:00',
+    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+    tasks=(),
+    interrupts=()
+)</code></pre>
+
+<h5>检查点 API</h5>
+<pre><code>config = {
+    "configurable": {
+        "thread_id": "1",
+    }
+}
+checkpointer.get_tuple(config)</code></pre>
+
+<pre><code>CheckpointTuple(
+    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
+    checkpoint={
+        'v': 3,
+        'ts': '2025-05-05T16:01:24.680462+00:00',
+        'id': '1f029ca3-1f5b-6704-8004-820c16b69a5a',
+        'channel_versions': {'__start__': '...', 'messages': '...', 'branch:to:call_model': '...'},
+        'versions_seen': {'__input__': {}, '__start__': {'__start__': '...'}, 'call_model': {'branch:to:call_model': '...'}},
+        'channel_values': {'messages': [HumanMessage(content="你好！我是 bob"), AIMessage(content='你好 Bob！...'), HumanMessage(content="我叫什么名字？"), AIMessage(content='你叫 Bob.')]},
+    },
+    metadata={
+        'source': 'loop',
+        'writes': {'call_model': {'messages': AIMessage(content='你叫 Bob.')}},
+        'step': 4,
+        'parents': {},
+        'thread_id': '1'
+    },
+    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+    pending_writes=[]
+)</code></pre>
+
+<h4 id="checkpoints">查看线程历史</h4>
+
+<h5>图/函数式 API</h5>
+<pre><code>config = {
+    "configurable": {
+        "thread_id": "1"
+    }
+}
+list(graph.get_state_history(config))</code></pre>
+
+<p>返回 <code>StateSnapshot</code> 对象列表，显示线程历史中的每个检查点，包括状态值、元数据和父引用。</p>
+
+<h5>检查点 API</h5>
+<pre><code>config = {
+    "configurable": {
+        "thread_id": "1"
+    }
+}
+list(checkpointer.list(config))</code></pre>
+
+<p>返回 <code>CheckpointTuple</code> 对象列表，显示原始检查点数据，包括通道版本、版本跟踪和待处理写入。</p>
+
+<h4>删除线程的所有检查点</h4>
+
+<pre><code>thread_id = "1"
+checkpointer.delete_thread(thread_id)</code></pre>
+
+<h2 id="db-management">数据库管理</h2>
+
+<p>如果您使用任何数据库支持的持久化实现（如 Postgres、Redis 或 Oracle）来存储短期和/或长期记忆，您需要运行迁移以设置所需的架构，然后才能在数据库中使用它。</p>
+
+<p>按照惯例，大多数数据库特定的库在检查点或存储实例上定义了 <code>setup()</code> 方法来运行所需的迁移。但是，您应该检查您的 <code>BaseCheckpointSaver</code> 或 <code>BaseStore</code> 的具体实现以确认确切的方法名称和用法。</p>
+
+<p>我们建议将迁移作为专用的部署步骤运行，或者您可以确保它们作为服务器启动的一部分运行。</p>
+
+<hr>
+
+<p style="color: #666; font-size: 0.9rem;">
+    原文来源：<a href="https://docs.langchain.com/oss/python/langgraph/add-memory">https://docs.langchain.com/oss/python/langgraph/add-memory</a><br>
+    翻译日期：2026-07-26
+</p>
+
+</div>
+
+<script>
+(function() {
+    const links = document.querySelectorAll('.toc a');
+    const sections = [];
+    links.forEach(link => {
+        const id = link.getAttribute('href').slice(1);
+        const el = document.getElementById(id);
+        if (el) sections.push({ id, el, link });
+    });
+    function update() {
+        let current = sections[0];
+        for (const s of sections) {
+            if (s.el.getBoundingClientRect().top <= 80) current = s;
+        }
+        links.forEach(l => l.classList.remove('active'));
+        if (current) current.link.classList.add('active');
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+})();
+</script>
+
+</body>
+</html>

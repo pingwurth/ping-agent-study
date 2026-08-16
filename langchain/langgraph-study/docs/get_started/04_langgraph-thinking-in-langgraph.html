@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangGraph 思维方式 - LangGraph</title>
+<style>
+  :root {
+    --color-bg: #ffffff;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #4a4a68;
+    --color-heading: #0f0f23;
+    --color-accent: #3b82f6;
+    --color-accent-light: #eff6ff;
+    --color-border: #e2e8f0;
+    --color-code-bg: #1e1e2e;
+    --color-code-text: #cdd6f4;
+    --color-inline-code-bg: #f1f5f9;
+    --color-inline-code-text: #0f172a;
+    --color-blockquote-bg: #f8fafc;
+    --color-blockquote-border: #3b82f6;
+    --color-table-header: #f8fafc;
+    --color-toc-bg: #f8fafc;
+    --color-toc-active: #3b82f6;
+    --color-tip-bg: #f0fdf4;
+    --color-tip-border: #22c55e;
+    --color-note-bg: #fffbeb;
+    --color-note-border: #f59e0b;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", Consolas, monospace;
+    --max-width: 1400px;
+    --content-max: 800px;
+    --toc-width: 260px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 2rem;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    line-height: 1.8;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .page-wrapper {
+    display: flex;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .main-content {
+    flex: 1;
+    max-width: var(--content-max);
+    min-width: 0;
+    padding: 3rem 2.5rem 6rem 0;
+  }
+
+  /* TOC */
+  .toc-sidebar {
+    position: sticky;
+    top: 2rem;
+    width: var(--toc-width);
+    flex-shrink: 0;
+    height: calc(100vh - 4rem);
+    overflow-y: auto;
+    padding: 3rem 0 3rem 1.5rem;
+    border-left: 1px solid var(--color-border);
+    margin-left: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .toc-sidebar::-webkit-scrollbar { width: 4px; }
+  .toc-sidebar::-webkit-scrollbar-track { background: transparent; }
+  .toc-sidebar::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+
+  .toc-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-secondary);
+    margin-bottom: 1rem;
+  }
+
+  .toc-list {
+    list-style: none;
+  }
+
+  .toc-list li { margin-bottom: 2px; }
+
+  .toc-list a {
+    display: block;
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    line-height: 1.5;
+    border-left: 2px solid transparent;
+  }
+
+  .toc-list a:hover {
+    color: var(--color-accent);
+    background: var(--color-accent-light);
+  }
+
+  .toc-list a.active {
+    color: var(--color-accent);
+    background: var(--color-accent-light);
+    border-left-color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .toc-list .toc-h3 {
+    padding-left: 24px;
+    font-size: 0.78rem;
+  }
+
+  @media (max-width: 1100px) {
+    .toc-sidebar { display: none; }
+    .page-wrapper { padding: 0 1.25rem; }
+    .main-content { padding: 2rem 0 4rem 0; }
+  }
+
+  @media (max-width: 640px) {
+    .main-content { padding: 1.5rem 0 3rem 0; }
+    body { font-size: 15px; }
+  }
+
+  /* Typography */
+  h1, h2, h3, h4 {
+    color: var(--color-heading);
+    line-height: 1.35;
+    font-weight: 700;
+  }
+
+  h1 {
+    font-size: 2.25rem;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.02em;
+  }
+
+  .page-subtitle {
+    font-size: 1.15rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 2.5rem;
+    line-height: 1.7;
+  }
+
+  h2 {
+    font-size: 1.6rem;
+    margin-top: 3.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  h2:first-of-type { margin-top: 0; }
+
+  h3 {
+    font-size: 1.25rem;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  h4 {
+    font-size: 1.05rem;
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  p {
+    margin-bottom: 1rem;
+  }
+
+  strong { font-weight: 650; }
+
+  a {
+    color: var(--color-accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s;
+  }
+
+  a:hover { border-bottom-color: var(--color-accent); }
+
+  /* Lists */
+  ul, ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  li > ul, li > ol {
+    margin-top: 0.35rem;
+    margin-bottom: 0;
+  }
+
+  /* Inline code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--color-inline-code-bg);
+    color: var(--color-inline-code-text);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--color-code-bg);
+    color: var(--color-code-text);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    line-height: 1.65;
+    font-size: 0.88rem;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+  }
+
+  .code-lang {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #89b4fa;
+    margin-bottom: 0.5rem;
+    background: rgba(137,180,250,0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* Blockquotes / Tips */
+  blockquote, .tip, .note {
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    border-left: 4px solid;
+    font-size: 0.95rem;
+  }
+
+  blockquote {
+    background: var(--color-blockquote-bg);
+    border-color: var(--color-blockquote-border);
+    color: var(--color-text-secondary);
+  }
+
+  blockquote p:last-child { margin-bottom: 0; }
+
+  .tip {
+    background: var(--color-tip-bg);
+    border-color: var(--color-tip-border);
+  }
+
+  .tip-label, .note-label {
+    font-weight: 700;
+    display: inline-block;
+    margin-bottom: 0.25rem;
+  }
+
+  .tip-label { color: #16a34a; }
+  .note-label { color: #d97706; }
+
+  .note {
+    background: var(--color-note-bg);
+    border-color: var(--color-note-border);
+  }
+
+  /* Tables */
+  .table-wrapper {
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--color-table-header);
+    font-weight: 650;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  /* Mermaid placeholder */
+  .mermaid-placeholder {
+    background: var(--color-accent-light);
+    border: 1px dashed var(--color-accent);
+    border-radius: 10px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--color-accent);
+    font-size: 0.95rem;
+  }
+
+  .mermaid-placeholder .mermaid-code {
+    text-align: left;
+    background: var(--color-code-bg);
+    color: var(--color-code-text);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Step badge */
+  .step-badge {
+    display: inline-block;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 12px;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+  }
+
+  /* Node description cards */
+  .node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .node-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
+
+  .node-card h4 {
+    margin-top: 0;
+    margin-bottom: 0.35rem;
+    font-size: 0.95rem;
+  }
+
+  .node-card p {
+    font-size: 0.88rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0;
+  }
+
+  /* Type cards */
+  .type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .type-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    text-align: center;
+  }
+
+  .type-card .icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  .type-card h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.95rem;
+  }
+
+  .type-card p {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1.15rem 1.25rem;
+  }
+
+  .summary-card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.35rem;
+    display: block;
+  }
+
+  .summary-card h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.95rem;
+  }
+
+  .summary-card p {
+    font-size: 0.88rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  /* Links list */
+  .link-list {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .link-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .link-list li:last-child { border-bottom: none; }
+
+  .link-list a {
+    font-weight: 500;
+  }
+
+  .link-list .link-desc {
+    color: var(--color-text-secondary);
+    font-size: 0.88rem;
+    margin-left: 0.25rem;
+  }
+
+  /* Footer */
+  .page-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+  }
+
+  .page-footer a {
+    color: var(--color-text-secondary);
+  }
+
+  .page-footer a:hover { color: var(--color-accent); }
+
+  /* Syntax highlighting (Catppuccin Mocha inspired) */
+  .token-keyword { color: #cba6f7; }
+  .token-string { color: #a6e3a1; }
+  .token-comment { color: #6c7086; font-style: italic; }
+  .token-function { color: #89b4fa; }
+  .token-type { color: #f9e2af; }
+  .token-decorator { color: #f38ba8; }
+  .token-number { color: #fab387; }
+  .token-builtin { color: #f38ba8; }
+  .token-operator { color: #89dceb; }
+  .token-param { color: #eba0ac; }
+  .token-punctuation { color: #9399b2; }
+</style>
+</head>
+<body>
+
+<div class="page-wrapper">
+  <main class="main-content">
+
+    <h1>LangGraph 中的思维方式</h1>
+    <p class="page-subtitle">了解如何使用 LangGraph 构建智能体（Agent）的思维方式</p>
+
+    <p>在使用 LangGraph 构建智能体时，用户将其分解为称为<strong>节点（node）</strong>的离散步骤，描述节点之间的转换，并通过节点读写的共享<strong>状态（state）</strong>将它们连接起来。本指南将引导你构建一个客户支持邮件智能体。</p>
+
+    <!-- ========== 从你要自动化的过程开始 ========== -->
+    <h2 id="start-with-the-process">从你要自动化的过程开始</h2>
+
+    <p>首先描述你要构建的内容。将其写成自然语言、流程图或任何对你有用的形式。关键是先思考流程，再思考代码。</p>
+
+    <p>以下是一个客户支持邮件智能体的需求示例：</p>
+
+    <blockquote>
+      <p>该智能体应该：</p>
+      <ul>
+        <li>读取收到的客户邮件</li>
+        <li>按紧急程度和主题进行分类</li>
+        <li>搜索相关文档以回答问题</li>
+        <li>草拟适当的回复</li>
+        <li>将复杂问题升级给人类客服</li>
+        <li>需要时安排后续跟进</li>
+      </ul>
+      <p>需要处理的场景示例：</p>
+      <ol>
+        <li>简单的产品问题："如何重置密码？"</li>
+        <li>Bug 报告："选择 PDF 格式时，导出功能会崩溃"</li>
+        <li>紧急账单问题："我的订阅被扣了两次费！"</li>
+        <li>功能请求："能否在移动端应用中添加深色模式？"</li>
+        <li>复杂技术问题："我们的 API 集成间歇性出现 504 错误"</li>
+      </ol>
+    </blockquote>
+
+    <p>要在 LangGraph 中实现智能体，用户通常遵循以下五个步骤。</p>
+
+    <!-- ========== 步骤 1 ========== -->
+    <h2 id="map-out-workflow">步骤 1：将工作流拆分为离散步骤</h2>
+
+    <p>每个独立的步骤成为一个<strong>节点</strong>（一个执行特定任务的函数），然后勾勒出这些步骤之间的连接方式。</p>
+
+    <h3 id="mermaid-diagram">流程图</h3>
+
+    <div class="mermaid-placeholder">
+      <strong>流程图</strong>
+      <p>显示邮件智能体工作流的节点和连接</p>
+      <div class="mermaid-code">flowchart TD
+    A[START] --> B[Read Email]
+    B --> C[Classify Intent]
+
+    C -.-> D[Doc Search]
+    C -.-> E[Bug Track]
+    C -.-> F[Human Review]
+
+    D --> G[Draft Reply]
+    E --> G
+    F --> G
+
+    G -.-> H[Human Review]
+    G -.-> I[Send Reply]
+
+    H --> J[END]
+    I --> J[END]</div>
+    </div>
+
+    <p>箭头显示可能的路径；决定走哪条路径的决策发生在每个节点内部。</p>
+
+    <h3 id="node-descriptions">节点说明</h3>
+
+    <div class="node-grid">
+      <div class="node-card">
+        <h4>Read Email（读取邮件）</h4>
+        <p>提取并解析邮件内容</p>
+      </div>
+      <div class="node-card">
+        <h4>Classify Intent（意图分类）</h4>
+        <p>使用 LLM 对紧急程度和主题进行分类，然后路由到适当的操作</p>
+      </div>
+      <div class="node-card">
+        <h4>Doc Search（文档搜索）</h4>
+        <p>查询知识库以获取相关信息</p>
+      </div>
+      <div class="node-card">
+        <h4>Bug Track（Bug 追踪）</h4>
+        <p>在追踪系统中创建或更新工单</p>
+      </div>
+      <div class="node-card">
+        <h4>Draft Reply（草拟回复）</h4>
+        <p>生成适当的回复</p>
+      </div>
+      <div class="node-card">
+        <h4>Human Review（人工审核）</h4>
+        <p>升级给人工客服进行审批或处理</p>
+      </div>
+      <div class="node-card">
+        <h4>Send Reply（发送回复）</h4>
+        <p>发送邮件回复</p>
+      </div>
+    </div>
+
+    <div class="tip">
+      <span class="tip-label">提示：</span>某些节点会决定下一步去哪里（<code>Classify Intent</code>、<code>Draft Reply</code>、<code>Human Review</code>），而其他节点总是继续到相同的下一步。
+    </div>
+
+    <!-- ========== 步骤 2 ========== -->
+    <h2 id="identify-step-types">步骤 2：确定每个步骤需要做什么</h2>
+
+    <p>对于每个节点，确定其操作类型以及需要哪些上下文。LangGraph 中的节点处理四种主要类型的操作。在设计智能体时，请考虑每个步骤属于哪种类型。</p>
+
+    <h3 id="step-type-cards">步骤类型</h3>
+
+    <div class="type-grid">
+      <div class="type-card">
+        <span class="icon">&#x1f9e0;</span>
+        <h4>LLM 步骤</h4>
+        <p>需要理解、分析、生成文本或进行推理决策时使用</p>
+      </div>
+      <div class="type-card">
+        <span class="icon">&#x1f5c4;</span>
+        <h4>数据步骤</h4>
+        <p>需要从外部源检索信息时使用</p>
+      </div>
+      <div class="type-card">
+        <span class="icon">&#x26a1;</span>
+        <h4>操作步骤</h4>
+        <p>需要执行外部操作时使用</p>
+      </div>
+      <div class="type-card">
+        <span class="icon">&#x1f464;</span>
+        <h4>用户输入步骤</h4>
+        <p>需要人工干预时使用</p>
+      </div>
+    </div>
+
+    <h3 id="llm-steps">LLM 步骤</h3>
+
+    <h4 id="classify-intent-detail">意图分类</h4>
+    <ul>
+      <li><strong>静态上下文（提示词）：</strong>分类类别、紧急程度定义、响应格式</li>
+      <li><strong>动态上下文（来自状态）：</strong>邮件内容、发件人信息</li>
+      <li><strong>期望结果：</strong>确定路由的结构化分类</li>
+    </ul>
+
+    <h4 id="draft-reply-detail">草拟回复</h4>
+    <ul>
+      <li><strong>静态上下文（提示词）：</strong>语气指南、公司政策、回复模板</li>
+      <li><strong>动态上下文（来自状态）：</strong>分类结果、搜索结果、客户历史</li>
+      <li><strong>期望结果：</strong>可供审核的专业邮件回复</li>
+    </ul>
+
+    <h3 id="data-steps">数据步骤</h3>
+
+    <h4 id="document-search-detail">文档搜索</h4>
+    <ul>
+      <li><strong>参数：</strong>根据意图和主题构建的查询</li>
+      <li><strong>重试策略：</strong>是，使用指数退避处理瞬时故障</li>
+      <li><strong>缓存：</strong>可以缓存常见查询以减少 API 调用</li>
+    </ul>
+
+    <h4 id="customer-history-detail">客户历史查询</h4>
+    <ul>
+      <li><strong>参数：</strong>来自状态的客户邮箱或 ID</li>
+      <li><strong>重试策略：</strong>是，但在不可用时回退到基本信息</li>
+      <li><strong>缓存：</strong>是，使用生存时间（TTL）平衡新鲜度和性能</li>
+    </ul>
+
+    <h3 id="action-steps">操作步骤</h3>
+
+    <h4 id="send-reply-detail">发送回复</h4>
+    <ul>
+      <li><strong>何时执行节点：</strong>在审批后（人工或自动）</li>
+      <li><strong>重试策略：</strong>是，使用指数退避处理网络问题</li>
+      <li><strong>不应缓存：</strong>每次发送都是唯一操作</li>
+    </ul>
+
+    <h4 id="bug-track-detail">Bug 追踪</h4>
+    <ul>
+      <li><strong>何时执行节点：</strong>当意图为 "bug" 时始终执行</li>
+      <li><strong>重试策略：</strong>是，确保不丢失 Bug 报告至关重要</li>
+      <li><strong>返回：</strong>工单 ID，用于包含在回复中</li>
+    </ul>
+
+    <h3 id="user-input-steps">用户输入步骤</h3>
+
+    <h4 id="human-review-detail">人工审核节点</h4>
+    <ul>
+      <li><strong>决策上下文：</strong>原始邮件、草拟回复、紧急程度、分类结果</li>
+      <li><strong>期望输入格式：</strong>审批布尔值加可选的编辑后回复</li>
+      <li><strong>触发时机：</strong>高紧急度、复杂问题或质量问题</li>
+    </ul>
+
+    <!-- ========== 步骤 3 ========== -->
+    <h2 id="design-your-state">步骤 3：设计你的状态</h2>
+
+    <p>状态是所有节点都可以访问的共享内存。可以将其想象为智能体用来跟踪它学到和决定的一切的笔记本。</p>
+
+    <h3 id="what-belongs-in-state">什么属于状态？</h3>
+
+    <ul>
+      <li><strong>包含在状态中：</strong>"它是否需要跨步骤持久化？如果是，它就属于状态。"</li>
+      <li><strong>不存储：</strong>"你能从其他数据派生它吗？如果是，需要时再计算。"</li>
+    </ul>
+
+    <p>对于邮件智能体，需要跟踪以下内容：</p>
+
+    <ul>
+      <li>原始邮件和发件人信息（无法稍后重建）</li>
+      <li>分类结果（多个下游节点需要）</li>
+      <li>搜索结果和客户数据（重新获取成本高）</li>
+      <li>草拟回复（需要在审核过程中持久化）</li>
+      <li>执行元数据（用于调试和恢复）</li>
+    </ul>
+
+    <div class="tip">
+      <span class="tip-label">提示：</span>"一个关键原则：你的状态应该存储原始数据，而不是格式化文本。在节点内部需要时格式化提示词。"
+    </div>
+
+    <p>这种分离意味着：</p>
+    <ul>
+      <li>不同的节点可以为自己的需求以不同方式格式化相同的数据</li>
+      <li>更改提示词模板不需要修改状态 schema</li>
+      <li>调试更清晰 — 你可以准确看到每个节点接收到的数据</li>
+      <li>智能体可以演进而不破坏现有状态</li>
+    </ul>
+
+    <h3 id="state-definition-code">状态定义代码</h3>
+
+    <pre><code><span class="token-keyword">from</span> typing <span class="token-keyword">import</span> TypedDict, Literal
+
+<span class="token-keyword">class</span> <span class="token-type">EmailClassification</span>(TypedDict):
+    intent: Literal[<span class="token-string">"question"</span>, <span class="token-string">"bug"</span>, <span class="token-string">"billing"</span>, <span class="token-string">"feature"</span>, <span class="token-string">"complex"</span>]
+    urgency: Literal[<span class="token-string">"low"</span>, <span class="token-string">"medium"</span>, <span class="token-string">"high"</span>, <span class="token-string">"critical"</span>]
+    topic: str
+    summary: str
+
+<span class="token-keyword">class</span> <span class="token-type">EmailAgentState</span>(TypedDict):
+    <span class="token-comment"># 原始邮件数据</span>
+    email_content: str
+    sender_email: str
+    email_id: str
+
+    <span class="token-comment"># 分类结果</span>
+    classification: EmailClassification | None
+
+    <span class="token-comment"># 原始搜索/API 结果</span>
+    search_results: list[str] | None
+    customer_history: dict | None
+
+    <span class="token-comment"># 生成的内容</span>
+    draft_response: str | None
+    messages: list[str] | None</code></pre>
+
+    <p>状态只包含原始数据 — 没有提示词模板、没有格式化字符串、没有指令。分类输出作为 LLM 返回的字典直接存储。</p>
+
+    <!-- ========== 步骤 4 ========== -->
+    <h2 id="build-your-nodes">步骤 4：构建你的节点</h2>
+
+    <p>每个步骤都实现为一个 Python 函数，它接收当前状态并返回对状态的更新。</p>
+
+    <h3 id="handle-errors">正确处理错误</h3>
+
+    <p>生产级智能体需要优雅地处理故障。LangGraph 在节点级别提供错误处理，因此你可以根据错误类型为每个操作配置适当的策略。</p>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>错误类型</th>
+            <th>谁来修复</th>
+            <th>策略</th>
+            <th>何时使用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>瞬时错误（网络问题、速率限制）</td>
+            <td>系统（自动）</td>
+            <td>重试策略</td>
+            <td>通常重试后可恢复的临时故障</td>
+          </tr>
+          <tr>
+            <td>LLM 可恢复错误（工具故障、解析问题）</td>
+            <td>LLM</td>
+            <td>将错误存储在状态中并循环回来</td>
+            <td>LLM 可以看到错误并调整其方法</td>
+          </tr>
+          <tr>
+            <td>用户可修复错误（信息缺失、指令不清）</td>
+            <td>人类</td>
+            <td>使用 <code>interrupt()</code> 暂停</td>
+            <td>需要用户输入才能继续</td>
+          </tr>
+          <tr>
+            <td>重试后的可恢复故障</td>
+            <td>开发者（声明式）</td>
+            <td><code>error_handler</code></td>
+            <td>在重试耗尽后运行补偿/恢复分支</td>
+          </tr>
+          <tr>
+            <td>意外错误</td>
+            <td>开发者</td>
+            <td>让它们冒泡</td>
+            <td>需要调试的未知问题</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="error-handling-examples">错误处理代码示例</h3>
+
+    <h4 id="transient-errors">瞬时错误</h4>
+
+    <pre><code><span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> RetryPolicy
+
+workflow.add_node(
+    <span class="token-string">"search_documentation"</span>,
+    search_documentation,
+    retry_policy=RetryPolicy(max_attempts=<span class="token-number">3</span>, initial_interval=<span class="token-number">1.0</span>)
+)</code></pre>
+
+    <h4 id="llm-recoverable-errors">LLM 可恢复错误</h4>
+
+    <pre><code><span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> Command
+
+
+<span class="token-keyword">def</span> <span class="token-function">execute_tool</span>(state: State) -> Command[Literal[<span class="token-string">"agent"</span>, <span class="token-string">"execute_tool"</span>]]:
+    <span class="token-keyword">try</span>:
+        result = run_tool(state[<span class="token-string">'tool_call'</span>])
+        <span class="token-keyword">return</span> Command(update={<span class="token-string">"tool_result"</span>: result}, goto=<span class="token-string">"agent"</span>)
+    <span class="token-keyword">except</span> ToolError <span class="token-keyword">as</span> e:
+        <span class="token-keyword">return</span> Command(
+            update={<span class="token-string">"tool_result"</span>: <span class="token-string">f"Tool error: </span>{str(e)}<span class="token-string">"</span>},
+            goto=<span class="token-string">"agent"</span>
+        )</code></pre>
+
+    <h4 id="user-fixable-errors">用户可修复错误</h4>
+
+    <pre><code><span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> Command
+
+
+<span class="token-keyword">def</span> <span class="token-function">lookup_customer_history</span>(state: State) -> Command[Literal[<span class="token-string">"draft_response"</span>]]:
+    <span class="token-keyword">if not</span> state.get(<span class="token-string">'customer_id'</span>):
+        user_input = interrupt({
+            <span class="token-string">"message"</span>: <span class="token-string">"Customer ID needed"</span>,
+            <span class="token-string">"request"</span>: <span class="token-string">"Please provide the customer's account ID to look up their subscription history"</span>
+        })
+        <span class="token-keyword">return</span> Command(
+            update={<span class="token-string">"customer_id"</span>: user_input[<span class="token-string">'customer_id'</span>]},
+            goto=<span class="token-string">"lookup_customer_history"</span>
+        )
+    customer_data = fetch_customer_history(state[<span class="token-string">'customer_id'</span>])
+    <span class="token-keyword">return</span> Command(update={<span class="token-string">"customer_history"</span>: customer_data}, goto=<span class="token-string">"draft_response"</span>)</code></pre>
+
+    <h4 id="unexpected-errors">意外错误</h4>
+
+    <pre><code><span class="token-keyword">def</span> <span class="token-function">send_reply</span>(state: EmailAgentState):
+    <span class="token-keyword">try</span>:
+        email_service.send(state[<span class="token-string">"draft_response"</span>])
+    <span class="token-keyword">except</span> Exception:
+        <span class="token-keyword">raise</span>  <span class="token-comment"># 将意外错误暴露出来</span></code></pre>
+
+    <h4 id="saga-compensation">Saga / 补偿</h4>
+
+    <div class="note">
+      <span class="note-label">注意：</span><code>error_handler</code> 需要 <code>langgraph&gt;=1.2</code>。
+    </div>
+
+    <pre><code><span class="token-keyword">from</span> langgraph.errors <span class="token-keyword">import</span> NodeError
+<span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> Command, RetryPolicy
+
+<span class="token-keyword">def</span> <span class="token-function">payment_error_handler</span>(state: State, error: NodeError) -> Command:
+    <span class="token-keyword">return</span> Command(
+        update={<span class="token-string">"status"</span>: <span class="token-string">f"compensated: </span>{error.error}<span class="token-string">"</span>},
+        goto=<span class="token-string">"finalize"</span>,
+    )
+
+workflow.add_node(
+    <span class="token-string">"charge_payment"</span>,
+    charge_payment,
+    retry_policy=RetryPolicy(max_attempts=<span class="token-number">3</span>, retry_on=ConnectionError),
+    error_handler=payment_error_handler,
+)</code></pre>
+
+    <h3 id="implementing-nodes">实现邮件智能体节点</h3>
+
+    <h4 id="read-classify-nodes">读取和分类节点</h4>
+
+    <pre><code><span class="token-keyword">from</span> typing <span class="token-keyword">import</span> Literal
+<span class="token-keyword">from</span> langgraph.graph <span class="token-keyword">import</span> StateGraph, START, END
+<span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> interrupt, Command, RetryPolicy
+<span class="token-keyword">from</span> langchain_openai <span class="token-keyword">import</span> ChatOpenAI
+<span class="token-keyword">from</span> langchain.messages <span class="token-keyword">import</span> HumanMessage
+
+llm = ChatOpenAI(model=<span class="token-string">"gpt-5-nano"</span>)
+
+<span class="token-keyword">def</span> <span class="token-function">read_email</span>(state: EmailAgentState) -> dict:
+    <span class="token-string">"""提取并解析邮件内容"""</span>
+    <span class="token-keyword">return</span> {
+        <span class="token-string">"messages"</span>: [HumanMessage(content=<span class="token-string">f"Processing email: </span>{state[<span class="token-string">'email_content'</span>]}<span class="token-string">"</span>)]
+    }
+
+<span class="token-keyword">def</span> <span class="token-function">classify_intent</span>(state: EmailAgentState) -> Command[Literal[<span class="token-string">"search_documentation"</span>, <span class="token-string">"human_review"</span>, <span class="token-string">"draft_response"</span>, <span class="token-string">"bug_tracking"</span>]]:
+    <span class="token-string">"""使用 LLM 对邮件意图和紧急程度进行分类，然后相应路由"""</span>
+    structured_llm = llm.with_structured_output(EmailClassification)
+    classification_prompt = <span class="token-string">f"""
+    分析此客户邮件并进行分类：
+
+    邮件：{state['email_content']}
+    发件人：{state['sender_email']}
+
+    提供分类，包括意图、紧急程度、主题和摘要。
+    """</span>
+    classification = structured_llm.invoke(classification_prompt)
+
+    <span class="token-keyword">if</span> classification[<span class="token-string">'intent'</span>] == <span class="token-string">'billing'</span> <span class="token-keyword">or</span> classification[<span class="token-string">'urgency'</span>] == <span class="token-string">'critical'</span>:
+        goto = <span class="token-string">"human_review"</span>
+    <span class="token-keyword">elif</span> classification[<span class="token-string">'intent'</span>] <span class="token-keyword">in</span> [<span class="token-string">'question'</span>, <span class="token-string">'feature'</span>]:
+        goto = <span class="token-string">"search_documentation"</span>
+    <span class="token-keyword">elif</span> classification[<span class="token-string">'intent'</span>] == <span class="token-string">'bug'</span>:
+        goto = <span class="token-string">"bug_tracking"</span>
+    <span class="token-keyword">else</span>:
+        goto = <span class="token-string">"draft_response"</span>
+
+    <span class="token-keyword">return</span> Command(
+        update={<span class="token-string">"classification"</span>: classification},
+        goto=goto
+    )</code></pre>
+
+    <h4 id="search-tracking-nodes">搜索和追踪节点</h4>
+
+    <pre><code><span class="token-keyword">def</span> <span class="token-function">search_documentation</span>(state: EmailAgentState) -> Command[Literal[<span class="token-string">"draft_response"</span>]]:
+    <span class="token-string">"""在知识库中搜索相关信息"""</span>
+    classification = state.get(<span class="token-string">'classification'</span>, {})
+    query = <span class="token-string">f"</span>{classification.get(<span class="token-string">'intent'</span>, <span class="token-string">''</span>)} {classification.get(<span class="token-string">'topic'</span>, <span class="token-string">''</span>)}<span class="token-string">"</span>
+
+    <span class="token-keyword">try</span>:
+        search_results = [
+            <span class="token-string">"Reset password via Settings > Security > Change Password"</span>,
+            <span class="token-string">"Password must be at least 12 characters"</span>,
+            <span class="token-string">"Include uppercase, lowercase, numbers, and symbols"</span>
+        ]
+    <span class="token-keyword">except</span> SearchAPIError <span class="token-keyword">as</span> e:
+        search_results = [<span class="token-string">f"Search temporarily unavailable: </span>{str(e)}<span class="token-string">"</span>]
+
+    <span class="token-keyword">return</span> Command(
+        update={<span class="token-string">"search_results"</span>: search_results},
+        goto=<span class="token-string">"draft_response"</span>
+    )
+
+<span class="token-keyword">def</span> <span class="token-function">bug_tracking</span>(state: EmailAgentState) -> Command[Literal[<span class="token-string">"draft_response"</span>]]:
+    <span class="token-string">"""创建或更新 Bug 追踪工单"""</span>
+    ticket_id = <span class="token-string">"BUG-12345"</span>
+    <span class="token-keyword">return</span> Command(
+        update={
+            <span class="token-string">"search_results"</span>: [<span class="token-string">f"Bug ticket </span>{ticket_id}<span class="token-string"> created"</span>],
+            <span class="token-string">"current_step"</span>: <span class="token-string">"bug_tracked"</span>
+        },
+        goto=<span class="token-string">"draft_response"</span>
+    )</code></pre>
+
+    <h4 id="response-nodes">回复节点</h4>
+
+    <pre><code><span class="token-keyword">def</span> <span class="token-function">draft_response</span>(state: EmailAgentState) -> Command[Literal[<span class="token-string">"human_review"</span>, <span class="token-string">"send_reply"</span>]]:
+    <span class="token-string">"""使用上下文生成回复并根据质量路由"""</span>
+    classification = state.get(<span class="token-string">'classification'</span>, {})
+    context_sections = []
+
+    <span class="token-keyword">if</span> state.get(<span class="token-string">'search_results'</span>):
+        formatted_docs = <span class="token-string">"\n"</span>.join([<span class="token-string">f"- </span>{doc}<span class="token-string">"</span> <span class="token-keyword">for</span> doc <span class="token-keyword">in</span> state[<span class="token-string">'search_results'</span>]])
+        context_sections.append(<span class="token-string">f"相关文档：\n</span>{formatted_docs}<span class="token-string">"</span>)
+
+    <span class="token-keyword">if</span> state.get(<span class="token-string">'customer_history'</span>):
+        context_sections.append(<span class="token-string">f"客户等级：</span>{state[<span class="token-string">'customer_history'</span>].get(<span class="token-string">'tier'</span>, <span class="token-string">'standard'</span>)}<span class="token-string">"</span>)
+
+    draft_prompt = <span class="token-string">f"""
+    为此客户邮件草拟回复：
+    {state['email_content']}
+
+    邮件意图：{classification.get('intent', 'unknown')}
+    紧急程度：{classification.get('urgency', 'medium')}
+
+    {chr(10).join(context_sections)}
+
+    指南：
+    - 保持专业和乐于助人
+    - 解决他们的具体问题
+    - 在相关时使用提供的文档
+    """</span>
+
+    response = llm.invoke(draft_prompt)
+
+    needs_review = (
+        classification.get(<span class="token-string">'urgency'</span>) <span class="token-keyword">in</span> [<span class="token-string">'high'</span>, <span class="token-string">'critical'</span>] <span class="token-keyword">or</span>
+        classification.get(<span class="token-string">'intent'</span>) == <span class="token-string">'complex'</span>
+    )
+    goto = <span class="token-string">"human_review"</span> <span class="token-keyword">if</span> needs_review <span class="token-keyword">else</span> <span class="token-string">"send_reply"</span>
+
+    <span class="token-keyword">return</span> Command(
+        update={<span class="token-string">"draft_response"</span>: response.content},
+        goto=goto
+    )
+
+<span class="token-keyword">def</span> <span class="token-function">human_review</span>(state: EmailAgentState) -> Command[Literal[<span class="token-string">"send_reply"</span>, END]]:
+    <span class="token-string">"""使用 interrupt 暂停等待人工审核，并根据决策路由"""</span>
+    classification = state.get(<span class="token-string">'classification'</span>, {})
+
+    human_decision = interrupt({
+        <span class="token-string">"email_id"</span>: state.get(<span class="token-string">'email_id'</span>,<span class="token-string">''</span>),
+        <span class="token-string">"original_email"</span>: state.get(<span class="token-string">'email_content'</span>,<span class="token-string">''</span>),
+        <span class="token-string">"draft_response"</span>: state.get(<span class="token-string">'draft_response'</span>,<span class="token-string">''</span>),
+        <span class="token-string">"urgency"</span>: classification.get(<span class="token-string">'urgency'</span>),
+        <span class="token-string">"intent"</span>: classification.get(<span class="token-string">'intent'</span>),
+        <span class="token-string">"action"</span>: <span class="token-string">"请审核并批准/编辑此回复"</span>
+    })
+
+    <span class="token-keyword">if</span> human_decision.get(<span class="token-string">"approved"</span>):
+        <span class="token-keyword">return</span> Command(
+            update={<span class="token-string">"draft_response"</span>: human_decision.get(<span class="token-string">"edited_response"</span>, state.get(<span class="token-string">'draft_response'</span>,<span class="token-string">''</span>))},
+            goto=<span class="token-string">"send_reply"</span>
+        )
+    <span class="token-keyword">else</span>:
+        <span class="token-keyword">return</span> Command(update={}, goto=END)
+
+<span class="token-keyword">def</span> <span class="token-function">send_reply</span>(state: EmailAgentState) -> dict:
+    <span class="token-string">"""发送邮件回复"""</span>
+    print(<span class="token-string">f"Sending reply: </span>{state[<span class="token-string">'draft_response'</span>][:<span class="token-number">100</span>]}<span class="token-string">..."</span>)
+    <span class="token-keyword">return</span> {}</code></pre>
+
+    <!-- ========== 步骤 5 ========== -->
+    <h2 id="wire-it-together">步骤 5：将它们连接起来</h2>
+
+    <p>现在将所有内容整合在一起。节点被连接成一个可工作的图。由于节点自行处理路由，因此只需要基本的边。要使用 <code>interrupt()</code> 实现人机交互，需要使用检查点器（checkpointer）进行编译。</p>
+
+    <h3 id="graph-compilation">图编译代码</h3>
+
+    <pre><code><span class="token-keyword">from</span> langgraph.checkpoint.memory <span class="token-keyword">import</span> MemorySaver
+<span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> RetryPolicy
+
+workflow = StateGraph(EmailAgentState)
+
+workflow.add_node(<span class="token-string">"read_email"</span>, read_email)
+workflow.add_node(<span class="token-string">"classify_intent"</span>, classify_intent)
+workflow.add_node(
+    <span class="token-string">"search_documentation"</span>,
+    search_documentation,
+    retry_policy=RetryPolicy(max_attempts=<span class="token-number">3</span>)
+)
+workflow.add_node(<span class="token-string">"bug_tracking"</span>, bug_tracking)
+workflow.add_node(<span class="token-string">"draft_response"</span>, draft_response)
+workflow.add_node(<span class="token-string">"human_review"</span>, human_review)
+workflow.add_node(<span class="token-string">"send_reply"</span>, send_reply)
+
+workflow.add_edge(START, <span class="token-string">"read_email"</span>)
+workflow.add_edge(<span class="token-string">"read_email"</span>, <span class="token-string">"classify_intent"</span>)
+workflow.add_edge(<span class="token-string">"send_reply"</span>, END)
+
+memory = MemorySaver()
+app = workflow.compile(checkpointer=memory)</code></pre>
+
+    <p>图结构是最小化的，因为路由通过 <code>Command</code> 对象在节点内部发生。每个节点使用类型提示（如 <code>Command[Literal["node1", "node2"]]</code>）声明它可以去往哪里。</p>
+
+    <h3 id="try-out-agent">试用你的智能体</h3>
+
+    <p>创建智能体后，使用 <a href="https://docs.langchain.com/oss/python/langgraph/streaming" target="_blank">流式传输（streaming）</a>运行它以查看节点执行情况，并使用 <a href="https://docs.langchain.com/oss/python/langgraph/interrupts" target="_blank">中断（interrupts）</a>进行人机交互审批。查看 <a href="https://docs.langchain.com/oss/python/langgraph/use-graph-api" target="_blank">API 参考</a>了解 <code>stream</code> 和 <code>stream_events</code> 的完整详情。</p>
+
+    <pre><code><span class="token-keyword">from</span> typing <span class="token-keyword">import</span> TypedDict
+
+<span class="token-keyword">from</span> langgraph.checkpoint.memory <span class="token-keyword">import</span> InMemorySaver
+<span class="token-keyword">from</span> langgraph.graph <span class="token-keyword">import</span> END, START, StateGraph
+<span class="token-keyword">from</span> langgraph.types <span class="token-keyword">import</span> Command, interrupt
+
+
+<span class="token-keyword">class</span> <span class="token-type">EmailState</span>(TypedDict):
+    email_content: str
+    response_text: str | None
+
+
+<span class="token-keyword">def</span> <span class="token-function">human_review_node</span>(state: EmailState):
+    interrupt(
+        {
+            <span class="token-string">"approved"</span>: False,
+            <span class="token-string">"edited_response"</span>: state.get(<span class="token-string">"response_text"</span>) <span class="token-keyword">or</span> <span class="token-string">""</span>,
+        }
+    )
+    <span class="token-keyword">return</span> {<span class="token-string">"response_text"</span>: <span class="token-string">"placeholder"</span>}
+
+
+app = (
+    StateGraph(EmailState)
+    .add_node(<span class="token-string">"human_review"</span>, human_review_node)
+    .add_edge(START, <span class="token-string">"human_review"</span>)
+    .add_edge(<span class="token-string">"human_review"</span>, END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+initial_state = {
+    <span class="token-string">"email_content"</span>: <span class="token-string">"I was charged twice for my subscription! This is urgent!"</span>,
+    <span class="token-string">"response_text"</span>: <span class="token-string">"Draft response"</span>,
+}
+
+config = {<span class="token-string">"configurable"</span>: {<span class="token-string">"thread_id"</span>: <span class="token-string">"customer_123"</span>}}
+stream = app.stream_events(initial_state, config, version=<span class="token-string">"v3"</span>)
+_ = stream.output
+print(<span class="token-string">f"human review interrupt:</span>{stream.interrupts}<span class="token-string">"</span>)
+
+human_response = Command(
+    resume={
+        <span class="token-string">"approved"</span>: True,
+        <span class="token-string">"edited_response"</span>: <span class="token-string">"We sincerely apologize for the double charge. I've initiated an immediate refund..."</span>,
+    }
+)
+
+resumed = app.stream_events(human_response, config, version=<span class="token-string">"v3"</span>)
+final_state = resumed.output
+print(<span class="token-string">"Email sent successfully!"</span>)</code></pre>
+
+    <p>图在 <code>interrupt()</code> 处暂停，保存到检查点器，并等待。它可以稍后从停止的地方恢复。<code>thread_id</code> 将所有状态保存在一起以维护对话上下文。这使得人类审核者可以在几分钟或几天后批准或编辑回复 — 智能体将从完全相同的位置继续执行。</p>
+
+    <!-- ========== 总结与后续步骤 ========== -->
+    <h2 id="summary-and-next-steps">总结与后续步骤</h2>
+
+    <p>在 LangGraph 中构建智能体遵循一个自然的模式：将工作流分解为离散步骤，设计共享状态，构建处理错误的节点，并将它们连接成一个图。</p>
+
+    <h3 id="key-insights">核心要点</h3>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="icon">&#x1f5c4;</span>
+        <h4>分解为离散步骤</h4>
+        <p>每个节点做好一件事，支持流式进度、带暂停/恢复的持久化执行，以及通过步骤间状态检查进行清晰调试。</p>
+      </div>
+      <div class="summary-card">
+        <span class="icon">&#x1f5c4;</span>
+        <h4>状态是共享内存</h4>
+        <p>存储原始数据而非格式化文本，这样不同的节点可以以不同方式使用相同的信息。</p>
+      </div>
+      <div class="summary-card">
+        <span class="icon">&#x1f4dd;</span>
+        <h4>节点就是函数</h4>
+        <p>它们接收状态、执行工作并返回更新。当需要路由决策时，它们同时指定状态更新和下一个目的地。</p>
+      </div>
+      <div class="summary-card">
+        <span class="icon">&#x26a0;</span>
+        <h4>错误是流程的一部分</h4>
+        <p>瞬时故障进行重试，LLM 可恢复错误携带上下文循环回来，用户可修复问题暂停等待输入，意外错误冒泡处理。</p>
+      </div>
+      <div class="summary-card">
+        <span class="icon">&#x1f464;</span>
+        <h4>人工输入是一等公民</h4>
+        <p><code>interrupt()</code> 函数无限期暂停执行，保存状态，并从停止的地方恢复。与其他操作结合使用时，它必须放在最前面。</p>
+      </div>
+      <div class="summary-card">
+        <span class="icon">&#x1f5c4;</span>
+        <h4>图结构自然涌现</h4>
+        <p>定义基本连接，节点自行处理路由逻辑，实现显式和可追踪的控制流。</p>
+      </div>
+    </div>
+
+    <h3 id="node-granularity-tradeoffs">进阶考量：节点粒度权衡</h3>
+
+    <blockquote>
+      <p><strong>信息：</strong>大多数应用可以跳过此部分，直接使用上面展示的模式。</p>
+    </blockquote>
+
+    <p>在设计智能体时，一个关键决策是将工作流分解为多少个节点。虽然本指南展示了一种平衡的方法，但理解其中的权衡有助于你为特定应用做出正确的选择。</p>
+
+    <p>LangGraph 的持久化层在节点边界创建检查点。更小的节点意味着更频繁的检查点，以及故障时需要更少的重复工作。</p>
+
+    <h4 id="why-this-breakdown">邮件智能体如此分解的原因</h4>
+
+    <ul>
+      <li><strong>外部服务隔离：</strong>文档搜索和 Bug 追踪是独立的，因为它们调用外部 API，允许独立的重试策略。</li>
+      <li><strong>中间可见性：</strong>将 "意图分类" 作为独立节点，可以在操作前检查 LLM 决策。</li>
+      <li><strong>不同的故障模式：</strong>LLM 调用、数据库查询和邮件发送有不同的重试策略；独立节点允许独立配置。</li>
+      <li><strong>可重用性和测试性：</strong>更小的节点更容易独立测试和重用。</li>
+    </ul>
+
+    <p>另一种有效的方法是将 "读取邮件" 和 "意图分类" 合并为一个节点，尽管这会牺牲检查能力，并在故障时重复两个操作。</p>
+
+    <p>应用级别的关注点（如缓存搜索结果）是节点函数内部的实现决策，而不是 LangGraph 框架特性。</p>
+
+    <p><strong>性能考量：</strong>更多的节点并不意味着更慢的执行。LangGraph 默认通过异步持久化模式在后台写入检查点。其他选项包括 <code>"exit"</code> 模式（仅在完成时检查点）或 <code>"sync"</code> 模式（阻塞直到每个检查点写入完成）。</p>
+
+    <h3 id="where-to-go-from-here">后续学习方向</h3>
+
+    <ul class="link-list">
+      <li><a href="https://docs.langchain.com/oss/python/langgraph/interrupts" target="_blank">人机交互模式</a> <span class="link-desc">— 工具审批、批量审批等模式</span></li>
+      <li><a href="https://docs.langchain.com/oss/python/langgraph/use-subgraphs" target="_blank">子图</a> <span class="link-desc">— 为复杂的多步骤操作创建子图</span></li>
+      <li><a href="https://docs.langchain.com/oss/python/langgraph/streaming" target="_blank">流式传输</a> <span class="link-desc">— 为用户提供实时进度</span></li>
+      <li><a href="https://docs.langchain.com/oss/python/langgraph/observability" target="_blank">可观测性</a> <span class="link-desc">— 使用 LangSmith 进行调试和监控</span></li>
+      <li><a href="https://docs.langchain.com/oss/python/langchain/tools" target="_blank">工具集成</a> <span class="link-desc">— 网络搜索、数据库查询、API 调用</span></li>
+      <li><a href="https://docs.langchain.com/oss/python/langgraph/use-graph-api#add-retry-policies" target="_blank">重试逻辑</a> <span class="link-desc">— 使用指数退避进行重试</span></li>
+    </ul>
+
+    <div class="page-footer">
+      <p>将这些文档通过 MCP 连接到 Claude、VSCode 等工具，获取实时答案。</p>
+      <p><a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/thinking-in-langgraph.mdx" target="_blank">在 GitHub 上编辑此页面</a> &middot; <a href="https://github.com/langchain-ai/docs/issues/new/choose" target="_blank">提交问题</a></p>
+    </div>
+
+  </main>
+
+  <!-- 右侧目录 -->
+  <nav class="toc-sidebar" aria-label="页面目录">
+    <div class="toc-title">目录</div>
+    <ul class="toc-list">
+      <li><a href="#start-with-the-process" class="toc-h2">从你要自动化的过程开始</a></li>
+      <li><a href="#map-out-workflow" class="toc-h2">步骤 1：将工作流拆分为离散步骤</a></li>
+      <li><a href="#mermaid-diagram" class="toc-h3">流程图</a></li>
+      <li><a href="#node-descriptions" class="toc-h3">节点说明</a></li>
+      <li><a href="#identify-step-types" class="toc-h2">步骤 2：确定每个步骤需要做什么</a></li>
+      <li><a href="#step-type-cards" class="toc-h3">步骤类型</a></li>
+      <li><a href="#llm-steps" class="toc-h3">LLM 步骤</a></li>
+      <li><a href="#data-steps" class="toc-h3">数据步骤</a></li>
+      <li><a href="#action-steps" class="toc-h3">操作步骤</a></li>
+      <li><a href="#user-input-steps" class="toc-h3">用户输入步骤</a></li>
+      <li><a href="#design-your-state" class="toc-h2">步骤 3：设计你的状态</a></li>
+      <li><a href="#what-belongs-in-state" class="toc-h3">什么属于状态？</a></li>
+      <li><a href="#state-definition-code" class="toc-h3">状态定义代码</a></li>
+      <li><a href="#build-your-nodes" class="toc-h2">步骤 4：构建你的节点</a></li>
+      <li><a href="#handle-errors" class="toc-h3">正确处理错误</a></li>
+      <li><a href="#error-handling-examples" class="toc-h3">错误处理代码示例</a></li>
+      <li><a href="#implementing-nodes" class="toc-h3">实现邮件智能体节点</a></li>
+      <li><a href="#wire-it-together" class="toc-h2">步骤 5：将它们连接起来</a></li>
+      <li><a href="#graph-compilation" class="toc-h3">图编译代码</a></li>
+      <li><a href="#try-out-agent" class="toc-h3">试用你的智能体</a></li>
+      <li><a href="#summary-and-next-steps" class="toc-h2">总结与后续步骤</a></li>
+      <li><a href="#key-insights" class="toc-h3">核心要点</a></li>
+      <li><a href="#node-granularity-tradeoffs" class="toc-h3">进阶考量：节点粒度权衡</a></li>
+      <li><a href="#where-to-go-from-here" class="toc-h3">后续学习方向</a></li>
+    </ul>
+  </nav>
+</div>
+
+<script>
+(function() {
+  // 获取所有需要跟踪的标题
+  var headings = document.querySelectorAll('.main-content h2[id], .main-content h3[id]');
+  var tocLinks = document.querySelectorAll('.toc-sidebar a');
+  var headingMap = {};
+
+  headings.forEach(function(h) {
+    headingMap[h.id] = h;
+  });
+
+  // 高亮当前目录项
+  function highlightToc() {
+    var scrollPos = window.scrollY + 100;
+    var currentId = null;
+
+    // 找到当前可见的标题
+    for (var i = headings.length - 1; i >= 0; i--) {
+      var heading = headings[i];
+      if (heading.offsetTop <= scrollPos) {
+        currentId = heading.id;
+        break;
+      }
+    }
+
+    tocLinks.forEach(function(link) {
+      link.classList.remove('active');
+      if (currentId && link.getAttribute('href') === '#' + currentId) {
+        link.classList.add('active');
+      }
+    });
+  }
+
+  // 节流函数
+  var ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      window.requestAnimationFrame(function() {
+        highlightToc();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+
+  // 初始高亮
+  highlightToc();
+
+  // 平滑滚动点击
+  tocLinks.forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      var targetId = this.getAttribute('href').substring(1);
+      var target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.pushState(null, null, '#' + targetId);
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

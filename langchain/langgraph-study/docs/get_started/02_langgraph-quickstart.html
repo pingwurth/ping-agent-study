@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>快速开始 - LangGraph</title>
+<style>
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #f8f9fa;
+    --color-border: #e1e4e8;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #586069;
+    --color-primary: #2563eb;
+    --color-primary-light: #dbeafe;
+    --color-code-bg: #1e1e2e;
+    --color-code-text: #cdd6f4;
+    --color-code-comment: #6c7086;
+    --color-tip-bg: #f0fdf4;
+    --color-tip-border: #86efac;
+    --color-info-bg: #eff6ff;
+    --color-info-border: #93c5fd;
+    --color-toc-active: #2563eb;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, "Noto Sans Mono CJK SC", monospace;
+    --toc-width: 260px;
+    --content-max: 820px;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 2rem;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    line-height: 1.7;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .page-wrapper {
+    display: flex;
+    justify-content: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    gap: 2rem;
+  }
+
+  .content {
+    max-width: var(--content-max);
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* TOC */
+  .toc-sidebar {
+    position: sticky;
+    top: 2rem;
+    width: var(--toc-width);
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+
+  .toc-sidebar h2 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  .toc-sidebar ul {
+    list-style: none;
+    border-left: 2px solid var(--color-border);
+  }
+
+  .toc-sidebar li {
+    margin: 0;
+  }
+
+  .toc-sidebar a {
+    display: block;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    margin-left: -2px;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1.5;
+  }
+
+  .toc-sidebar a:hover {
+    color: var(--color-text);
+  }
+
+  .toc-sidebar a.active {
+    color: var(--color-toc-active);
+    border-left-color: var(--color-toc-active);
+    font-weight: 500;
+  }
+
+  .toc-sidebar a.toc-h3 {
+    padding-left: 1.5rem;
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 1099px) {
+    .toc-sidebar {
+      display: none;
+    }
+    .page-wrapper {
+      justify-content: center;
+    }
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .page-subtitle {
+    font-size: 1.1rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 2rem;
+    line-height: 1.6;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 3rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+  }
+
+  p {
+    margin-bottom: 1rem;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  /* Lists */
+  ul, ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  /* Tip / Info boxes */
+  .callout {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .callout-tip {
+    background: var(--color-tip-bg);
+    border-left: 4px solid var(--color-tip-border);
+  }
+
+  .callout-info {
+    background: var(--color-info-bg);
+    border-left: 4px solid var(--color-info-border);
+  }
+
+  .callout p {
+    margin-bottom: 0.5rem;
+  }
+
+  .callout p:last-child {
+    margin-bottom: 0;
+  }
+
+  .callout ul {
+    margin-bottom: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.15em 0.35em;
+  }
+
+  pre {
+    background: var(--color-code-bg);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.875rem;
+    color: var(--color-code-text);
+  }
+
+  /* Details / Summary */
+  details {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  summary {
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    background: var(--color-surface);
+    user-select: none;
+  }
+
+  summary:hover {
+    background: #eef1f5;
+  }
+
+  details[open] summary {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  details > pre {
+    margin: 0;
+    border-radius: 0;
+  }
+
+  /* Link list */
+  .api-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .api-links a {
+    display: inline-block;
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .api-links a:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    text-decoration: none;
+  }
+
+  /* Separator */
+  hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 2rem 0;
+  }
+
+  /* Reference links at bottom */
+  .ref-link code {
+    font-size: 0.85em;
+  }
+
+  /* Success message */
+  .success-msg {
+    background: var(--color-tip-bg);
+    border: 1px solid var(--color-tip-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    font-weight: 500;
+  }
+
+  /* Scrollbar for TOC */
+  .toc-sidebar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .toc-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .toc-sidebar::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 2px;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    body {
+      font-size: 15px;
+    }
+    h1 {
+      font-size: 1.75rem;
+    }
+    h2 {
+      font-size: 1.3rem;
+    }
+    h3 {
+      font-size: 1.1rem;
+    }
+    pre {
+      padding: 1rem;
+      font-size: 0.8rem;
+    }
+    .page-wrapper {
+      padding: 1rem 1rem 3rem;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrapper">
+  <main class="content">
+    <h1>快速开始</h1>
+    <p class="page-subtitle">本快速开始演示如何使用 LangGraph Graph API 或 Functional API 构建一个计算器智能体。</p>
+
+    <div class="callout callout-tip">
+      <p><strong>提示：正在使用 AI 编程助手？</strong></p>
+      <ul>
+        <li>安装 <a href="/use-these-docs">LangChain Docs MCP 服务器</a>，让你的智能体可以访问最新的 LangChain 文档和示例。</li>
+        <li>安装 <a href="https://github.com/langchain-ai/langchain-skills">LangChain Skills</a>，提升你的智能体在 LangChain 生态系统任务上的表现。</li>
+      </ul>
+    </div>
+
+    <div class="api-links">
+      <a href="#use-the-graph-api">使用 Graph API</a>
+      <a href="#use-the-functional-api">使用 Functional API</a>
+    </div>
+
+    <p>如果你倾向于将智能体定义为由节点和边组成的图，请使用 <a href="#use-the-graph-api">Graph API</a>。如果你倾向于将智能体定义为单个函数，请使用 <a href="#use-the-functional-api">Functional API</a>。</p>
+
+    <p>有关概念性信息，请参阅 <a href="/oss/python/langgraph/graph-api">Graph API 概述</a> 和 <a href="/oss/python/langgraph/functional-api">Functional API 概述</a>。</p>
+
+    <div class="callout callout-info">
+      <p><strong>注意：</strong>对于本示例，你需要设置一个 <a href="https://www.anthropic.com/">Claude (Anthropic)</a> 账户并获取 API 密钥。然后，在终端中设置 <code>ANTHROPIC_API_KEY</code> 环境变量。</p>
+    </div>
+
+    <!-- ==================== GRAPH API ==================== -->
+    <h2 id="use-the-graph-api">使用 Graph API</h2>
+
+    <h3 id="graph-1-define-tools-and-model">1. 定义工具和模型</h3>
+    <p>在此示例中，我们将使用 Claude Sonnet 4.5 模型，并定义加法、乘法和除法的工具。</p>
+
+<pre><code><span style="color: #cdd6f4;">from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+
+
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    temperature=0
+)
+
+
+# 定义工具
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a * b
+
+
+@tool
+def add(a: int, b: int) -> int:
+    """Adds `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a + b
+
+
+@tool
+def divide(a: int, b: int) -> float:
+    """Divide `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a / b
+
+
+# 用工具增强 LLM
+tools = [add, multiply, divide]
+tools_by_name = {tool.name: tool for tool in tools}
+model_with_tools = model.bind_tools(tools)</span></code></pre>
+
+    <h3 id="graph-2-define-state">2. 定义状态</h3>
+    <p>图的状态用于存储消息和 LLM 调用次数。</p>
+
+    <div class="callout callout-tip">
+      <p><strong>提示：</strong>LangGraph 中的状态在整个智能体执行期间持续存在。使用 <code>Annotated</code> 类型配合 <code>operator.add</code> 可确保新消息被追加到现有列表中，而不是替换它。</p>
+    </div>
+
+<pre><code><span style="color: #cdd6f4;">from langchain.messages import AnyMessage
+from typing_extensions import TypedDict, Annotated
+import operator
+
+
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], operator.add]
+    llm_calls: int</span></code></pre>
+
+    <h3 id="graph-3-define-model-node">3. 定义模型节点</h3>
+    <p>模型节点用于调用 LLM 并决定是否调用工具。</p>
+
+<pre><code><span style="color: #cdd6f4;">from langchain.messages import SystemMessage
+
+
+def llm_call(state: dict):
+    """LLM 决定是否调用工具"""
+
+    return {
+        "messages": [
+            model_with_tools.invoke(
+                [
+                    SystemMessage(
+                        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+                    )
+                ]
+                + state["messages"]
+            )
+        ],
+        "llm_calls": state.get('llm_calls', 0) + 1
+    }</span></code></pre>
+
+    <h3 id="graph-4-define-tool-node">4. 定义工具节点</h3>
+    <p>工具节点用于调用工具并返回结果。</p>
+
+<pre><code><span style="color: #cdd6f4;">from langchain.messages import ToolMessage
+
+
+def tool_node(state: dict):
+    """执行工具调用"""
+
+    result = []
+    for tool_call in state["messages"][-1].tool_calls:
+        tool = tools_by_name[tool_call["name"]]
+        observation = tool.invoke(tool_call["args"])
+        result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+    return {"messages": result}</span></code></pre>
+
+    <h3 id="graph-5-define-end-logic">5. 定义结束逻辑</h3>
+    <p>条件边函数根据 LLM 是否发出了工具调用来路由到工具节点或结束。</p>
+
+<pre><code><span style="color: #cdd6f4;">from typing import Literal
+from langgraph.graph import StateGraph, START, END
+
+
+def should_continue(state: MessagesState) -> Literal["tool_node", END]:
+    """根据 LLM 是否发出工具调用来决定是继续循环还是停止"""
+
+    messages = state["messages"]
+    last_message = messages[-1]
+
+    # 如果 LLM 发出了工具调用，则执行操作
+    if last_message.tool_calls:
+        return "tool_node"
+
+    # 否则，停止（回复用户）
+    return END</span></code></pre>
+
+    <h3 id="graph-6-build-and-compile">6. 构建并编译智能体</h3>
+    <p>使用 <a class="ref-link" href="https://reference.langchain.com/python/langgraph/graph/state/StateGraph"><code>StateGraph</code></a> 类构建智能体，并使用 <a class="ref-link" href="https://reference.langchain.com/python/langgraph/graph/state/StateGraph/compile"><code>compile</code></a> 方法编译。</p>
+
+<pre><code><span style="color: #cdd6f4;"># 构建工作流
+agent_builder = StateGraph(MessagesState)
+
+# 添加节点
+agent_builder.add_node("llm_call", llm_call)
+agent_builder.add_node("tool_node", tool_node)
+
+# 添加边以连接节点
+agent_builder.add_edge(START, "llm_call")
+agent_builder.add_conditional_edges(
+    "llm_call",
+    should_continue,
+    ["tool_node", END]
+)
+agent_builder.add_edge("tool_node", "llm_call")
+
+# 编译智能体
+agent = agent_builder.compile()
+
+# 显示智能体
+from IPython.display import Image, display
+display(Image(agent.get_graph(xray=True).draw_mermaid_png()))
+
+# 调用
+from langchain.messages import HumanMessage
+messages = [HumanMessage(content="Add 3 and 4.")]
+messages = agent.invoke({"messages": messages})
+for m in messages["messages"]:
+    m.pretty_print()</span></code></pre>
+
+    <div class="callout callout-tip">
+      <p><strong>提示：</strong>使用 <a href="https://smith.langchain.com?utm_source=docs&utm_medium=cta&utm_campaign=langsmith-signup&utm_content=oss-langgraph-quickstart">LangSmith</a> 跟踪和调试你的智能体。按照 <a href="/langsmith/trace-with-langgraph">跟踪快速开始</a> 进行设置。准备投入生产时，请参阅 <a href="/langsmith/deployment">部署</a> 了解托管选项。</p>
+      <p>我们还建议你设置 <a href="/langsmith/engine">LangSmith Engine</a>，它可以监控你的跟踪数据、检测问题并提出修复方案。</p>
+    </div>
+
+    <div class="success-msg">恭喜！你已经使用 LangGraph Graph API 构建了你的第一个智能体。</div>
+
+    <details>
+      <summary>完整代码示例</summary>
+<pre><code><span style="color: #cdd6f4;"># 步骤 1：定义工具和模型
+
+from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+
+
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    temperature=0
+)
+
+
+# 定义工具
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a * b
+
+
+@tool
+def add(a: int, b: int) -> int:
+    """Adds `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a + b
+
+
+@tool
+def divide(a: int, b: int) -> float:
+    """Divide `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a / b
+
+
+# 用工具增强 LLM
+tools = [add, multiply, divide]
+tools_by_name = {tool.name: tool for tool in tools}
+model_with_tools = model.bind_tools(tools)
+
+# 步骤 2：定义状态
+
+from langchain.messages import AnyMessage
+from typing_extensions import TypedDict, Annotated
+import operator
+
+
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], operator.add]
+    llm_calls: int
+
+# 步骤 3：定义模型节点
+from langchain.messages import SystemMessage
+
+
+def llm_call(state: MessagesState):
+    """LLM 决定是否调用工具"""
+
+    return {
+        "messages": [
+            model_with_tools.invoke(
+                [
+                    SystemMessage(
+                        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+                    )
+                ]
+                + state["messages"]
+            )
+        ],
+        "llm_calls": state.get('llm_calls', 0) + 1
+    }
+
+
+# 步骤 4：定义工具节点
+
+from langchain.messages import ToolMessage
+
+
+def tool_node(state: MessagesState):
+    """执行工具调用"""
+
+    result = []
+    for tool_call in state["messages"][-1].tool_calls:
+        tool = tools_by_name[tool_call["name"]]
+        observation = tool.invoke(tool_call["args"])
+        result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+    return {"messages": result}
+
+# 步骤 5：定义结束逻辑
+
+from typing import Literal
+from langgraph.graph import StateGraph, START, END
+
+
+# 条件边函数，根据 LLM 是否发出工具调用来路由到工具节点或结束
+def should_continue(state: MessagesState) -> Literal["tool_node", END]:
+    """根据 LLM 是否发出工具调用来决定是继续循环还是停止"""
+
+    messages = state["messages"]
+    last_message = messages[-1]
+
+    # 如果 LLM 发出了工具调用，则执行操作
+    if last_message.tool_calls:
+        return "tool_node"
+
+    # 否则，停止（回复用户）
+    return END
+
+# 步骤 6：构建智能体
+
+# 构建工作流
+agent_builder = StateGraph(MessagesState)
+
+# 添加节点
+agent_builder.add_node("llm_call", llm_call)
+agent_builder.add_node("tool_node", tool_node)
+
+# 添加边以连接节点
+agent_builder.add_edge(START, "llm_call")
+agent_builder.add_conditional_edges(
+    "llm_call",
+    should_continue,
+    ["tool_node", END]
+)
+agent_builder.add_edge("tool_node", "llm_call")
+
+# 编译智能体
+agent = agent_builder.compile()
+
+
+from IPython.display import Image, display
+# 显示智能体
+display(Image(agent.get_graph(xray=True).draw_mermaid_png()))
+
+# 调用
+from langchain.messages import HumanMessage
+messages = [HumanMessage(content="Add 3 and 4.")]
+messages = agent.invoke({"messages": messages})
+for m in messages["messages"]:
+    m.pretty_print()</span></code></pre>
+    </details>
+
+    <hr>
+
+    <!-- ==================== FUNCTIONAL API ==================== -->
+    <h2 id="use-the-functional-api">使用 Functional API</h2>
+
+    <h3 id="func-1-define-tools-and-model">1. 定义工具和模型</h3>
+    <p>在此示例中，我们将使用 Claude Sonnet 4.5 模型，并定义加法、乘法和除法的工具。</p>
+
+<pre><code><span style="color: #cdd6f4;">from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+
+
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    temperature=0
+)
+
+
+# 定义工具
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a * b
+
+
+@tool
+def add(a: int, b: int) -> int:
+    """Adds `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a + b
+
+
+@tool
+def divide(a: int, b: int) -> float:
+    """Divide `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a / b
+
+
+# 用工具增强 LLM
+tools = [add, multiply, divide]
+tools_by_name = {tool.name: tool for tool in tools}
+model_with_tools = model.bind_tools(tools)
+
+from langgraph.graph import add_messages
+from langchain.messages import (
+    SystemMessage,
+    HumanMessage,
+    ToolCall,
+)
+from langchain_core.messages import BaseMessage
+from langgraph.func import entrypoint, task</span></code></pre>
+
+    <h3 id="func-2-define-model-node">2. 定义模型节点</h3>
+    <p>模型节点用于调用 LLM 并决定是否调用工具。</p>
+
+    <div class="callout callout-tip">
+      <p><strong>提示：</strong><code>@task</code> 装饰器将函数标记为可作为智能体一部分执行的任务。任务可以在你的入口函数中同步或异步调用。有关更多信息，请参阅 <a href="https://reference.langchain.com/python/langgraph/func/task"><code>@task</code> 参考文档</a>。</p>
+    </div>
+
+<pre><code><span style="color: #cdd6f4;">@task
+def call_llm(messages: list[BaseMessage]):
+    """LLM 决定是否调用工具"""
+    return model_with_tools.invoke(
+        [
+            SystemMessage(
+                content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+            )
+        ]
+        + messages
+    )</span></code></pre>
+
+    <h3 id="func-3-define-tool-node">3. 定义工具节点</h3>
+    <p>工具节点用于调用工具并返回结果。</p>
+
+<pre><code><span style="color: #cdd6f4;">@task
+def call_tool(tool_call: ToolCall):
+    """执行工具调用"""
+    tool = tools_by_name[tool_call["name"]]
+    return tool.invoke(tool_call)</span></code></pre>
+
+    <h3 id="func-4-define-agent">4. 定义智能体</h3>
+    <p>使用 <a class="ref-link" href="https://reference.langchain.com/python/langgraph/func/entrypoint"><code>@entrypoint</code></a> 函数构建智能体。</p>
+
+    <div class="callout callout-info">
+      <p><strong>注意：</strong>在 Functional API 中，你无需显式定义节点和边，而是在单个函数中编写标准的控制流逻辑（循环、条件判断）。</p>
+    </div>
+
+<pre><code><span style="color: #cdd6f4;">@entrypoint()
+def agent(messages: list[BaseMessage]):
+    model_response = call_llm(messages).result()
+
+    while True:
+        if not model_response.tool_calls:
+            break
+
+        # 执行工具
+        tool_result_futures = [
+            call_tool(tool_call) for tool_call in model_response.tool_calls
+        ]
+        tool_results = [fut.result() for fut in tool_result_futures]
+        messages = add_messages(messages, [model_response, *tool_results])
+        model_response = call_llm(messages).result()
+
+    messages = add_messages(messages, model_response)
+    return messages
+
+# 调用
+messages = [HumanMessage(content="Add 3 and 4.")]
+stream = agent.stream_events(messages, version="v3")
+for snapshot in stream.values:
+    print(snapshot)
+    print("\n")</span></code></pre>
+
+    <div class="callout callout-tip">
+      <p><strong>提示：</strong>使用 <a href="https://smith.langchain.com?utm_source=docs&utm_medium=cta&utm_campaign=langsmith-signup&utm_content=oss-langgraph-quickstart">LangSmith</a> 跟踪和调试你的智能体。按照 <a href="/langsmith/trace-with-langgraph">跟踪快速开始</a> 进行设置。准备投入生产时，请参阅 <a href="/langsmith/deployment">部署</a> 了解托管选项。</p>
+      <p>我们还建议你设置 <a href="/langsmith/engine">LangSmith Engine</a>，它可以监控你的跟踪数据、检测问题并提出修复方案。</p>
+    </div>
+
+    <div class="success-msg">恭喜！你已经使用 LangGraph Functional API 构建了你的第一个智能体。</div>
+
+    <details>
+      <summary>完整代码示例</summary>
+<pre><code><span style="color: #cdd6f4;"># 步骤 1：定义工具和模型
+
+from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+
+
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    temperature=0
+)
+
+
+# 定义工具
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a * b
+
+
+@tool
+def add(a: int, b: int) -> int:
+    """Adds `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a + b
+
+
+@tool
+def divide(a: int, b: int) -> float:
+    """Divide `a` and `b`.
+
+    Args:
+        a: 第一个整数
+        b: 第二个整数
+    """
+    return a / b
+
+
+# 用工具增强 LLM
+tools = [add, multiply, divide]
+tools_by_name = {tool.name: tool for tool in tools}
+model_with_tools = model.bind_tools(tools)
+
+from langgraph.graph import add_messages
+from langchain.messages import (
+    SystemMessage,
+    HumanMessage,
+    ToolCall,
+)
+from langchain_core.messages import BaseMessage
+from langgraph.func import entrypoint, task
+
+
+# 步骤 2：定义模型节点
+
+@task
+def call_llm(messages: list[BaseMessage]):
+    """LLM 决定是否调用工具"""
+    return model_with_tools.invoke(
+        [
+            SystemMessage(
+                content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+            )
+        ]
+        + messages
+    )
+
+
+# 步骤 3：定义工具节点
+
+@task
+def call_tool(tool_call: ToolCall):
+    """执行工具调用"""
+    tool = tools_by_name[tool_call["name"]]
+    return tool.invoke(tool_call)
+
+
+# 步骤 4：定义智能体
+
+@entrypoint()
+def agent(messages: list[BaseMessage]):
+    model_response = call_llm(messages).result()
+
+    while True:
+        if not model_response.tool_calls:
+            break
+
+        # 执行工具
+        tool_result_futures = [
+            call_tool(tool_call) for tool_call in model_response.tool_calls
+        ]
+        tool_results = [fut.result() for fut in tool_result_futures]
+        messages = add_messages(messages, [model_response, *tool_results])
+        model_response = call_llm(messages).result()
+
+    messages = add_messages(messages, model_response)
+    return messages
+
+# 调用
+messages = [HumanMessage(content="Add 3 and 4.")]
+stream = agent.stream_events(messages, version="v3")
+for snapshot in stream.values:
+    print(snapshot)
+    print("\n")</span></code></pre>
+    </details>
+
+    <hr>
+
+    <p style="font-size: 0.9rem; color: var(--color-text-secondary);">
+      <strong>将这些文档连接</strong>到 Claude、VSCode 等工具，通过 MCP 获取实时答案。 &mdash; <a href="/use-these-docs">使用这些文档</a><br>
+      <strong>在 GitHub 上编辑此页面</strong> &mdash; <a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/quickstart.mdx">编辑</a> | <a href="https://github.com/langchain-ai/docs/issues/new/choose">提交问题</a>
+    </p>
+  </main>
+
+  <!-- TOC Sidebar -->
+  <nav class="toc-sidebar" aria-label="目录">
+    <h2>目录</h2>
+    <ul id="toc-list">
+      <li><a href="#use-the-graph-api" class="toc-h2">使用 Graph API</a></li>
+      <li><a href="#graph-1-define-tools-and-model" class="toc-h3">1. 定义工具和模型</a></li>
+      <li><a href="#graph-2-define-state" class="toc-h3">2. 定义状态</a></li>
+      <li><a href="#graph-3-define-model-node" class="toc-h3">3. 定义模型节点</a></li>
+      <li><a href="#graph-4-define-tool-node" class="toc-h3">4. 定义工具节点</a></li>
+      <li><a href="#graph-5-define-end-logic" class="toc-h3">5. 定义结束逻辑</a></li>
+      <li><a href="#graph-6-build-and-compile" class="toc-h3">6. 构建并编译智能体</a></li>
+      <li><a href="#use-the-functional-api" class="toc-h2">使用 Functional API</a></li>
+      <li><a href="#func-1-define-tools-and-model" class="toc-h3">1. 定义工具和模型</a></li>
+      <li><a href="#func-2-define-model-node" class="toc-h3">2. 定义模型节点</a></li>
+      <li><a href="#func-3-define-tool-node" class="toc-h3">3. 定义工具节点</a></li>
+      <li><a href="#func-4-define-agent" class="toc-h3">4. 定义智能体</a></li>
+    </ul>
+  </nav>
+</div>
+
+<script>
+(function() {
+  var tocLinks = document.querySelectorAll('.toc-sidebar a');
+  var headings = [];
+
+  tocLinks.forEach(function(link) {
+    var id = link.getAttribute('href').substring(1);
+    var el = document.getElementById(id);
+    if (el) {
+      headings.push({ id: id, el: el, link: link });
+    }
+  });
+
+  function onScroll() {
+    var scrollY = window.scrollY;
+    var current = null;
+
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      var top = h.el.getBoundingClientRect().top + scrollY - 100;
+      if (scrollY >= top) {
+        current = h;
+      }
+    }
+
+    tocLinks.forEach(function(link) {
+      link.classList.remove('active');
+    });
+
+    if (current) {
+      current.link.classList.add('active');
+    }
+  }
+
+  var ticking = false;
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      window.requestAnimationFrame(function() {
+        onScroll();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+
+  onScroll();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>嵌入模型 - LangChain 文档</title>
+    <style>
+        :root {
+            --primary: #161F34;
+            --primary-light: #7FC8FF;
+            --primary-dark: #006DDD;
+            --bg-light: #FFFFFF;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a6a;
+            --text-muted: #8888a8;
+            --border-color: #e5e7eb;
+            --code-bg: #f8f9fa;
+            --sidebar-width: 280px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.7;
+            color: var(--text-primary);
+            background: var(--bg-light);
+        }
+        .top-nav {
+            position: fixed; top: 0; left: 0; right: 0; height: 64px;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color); z-index: 100;
+            display: flex; align-items: center; padding: 0 2rem;
+        }
+        .top-nav .logo { font-size: 1.25rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+        .top-nav .breadcrumb { margin-left: 2rem; font-size: 0.875rem; color: var(--text-muted); }
+        .top-nav .breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+        .main-container { display: flex; margin-top: 64px; min-height: calc(100vh - 64px); }
+        .left-sidebar {
+            width: 260px; position: fixed; top: 64px; left: 0; bottom: 0;
+            overflow-y: auto; padding: 1.5rem 1rem; border-right: 1px solid var(--border-color);
+        }
+        .left-sidebar .nav-group { margin-bottom: 1.5rem; }
+        .left-sidebar .nav-group-title {
+            font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; padding-left: 0.75rem;
+        }
+        .left-sidebar .nav-item {
+            display: block; padding: 0.5rem 0.75rem; font-size: 0.875rem;
+            color: var(--text-secondary); text-decoration: none; border-radius: 0.5rem; transition: all 0.15s ease;
+        }
+        .left-sidebar .nav-item:hover { background: rgba(0,109,221,0.05); color: var(--text-primary); }
+        .left-sidebar .nav-item.active { background: rgba(0,109,221,0.1); color: var(--primary-dark); font-weight: 500; }
+        .content {
+            flex: 1; margin-left: 260px; margin-right: var(--sidebar-width);
+            max-width: calc(100% - 260px - var(--sidebar-width)); padding: 2rem 3rem;
+        }
+        .content h1 { font-size: 2.25rem; font-weight: 700; color: var(--primary); margin-bottom: 1rem; line-height: 1.3; }
+        .content .subtitle { font-size: 1.125rem; color: var(--text-secondary); margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+        .content h2 { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin-top: 2.5rem; margin-bottom: 1rem; padding-top: 1rem; }
+        .content h3 { font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin-top: 2rem; margin-bottom: 0.75rem; }
+        .content p { margin-bottom: 1rem; color: var(--text-secondary); }
+        .content a { color: var(--primary-dark); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.15s ease; }
+        .content a:hover { border-bottom-color: var(--primary-dark); }
+        .content ul, .content ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+        .content li { margin-bottom: 0.5rem; color: var(--text-secondary); }
+        .content li strong { color: var(--text-primary); }
+        .code-block {
+            background: var(--code-bg); border: 1px solid var(--border-color);
+            border-radius: 0.75rem; margin: 1.5rem 0; overflow: hidden;
+        }
+        .code-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.75rem 1rem; background: #f1f3f5; border-bottom: 1px solid var(--border-color);
+            font-size: 0.8125rem; color: var(--text-muted);
+        }
+        .code-header .lang { font-weight: 600; color: var(--text-secondary); }
+        .code-block pre { padding: 1rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.6; }
+        .code-block code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; color: var(--text-primary); }
+        .content code {
+            font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+            font-size: 0.875em; background: rgba(0,109,221,0.08); color: #d63384;
+            padding: 0.125rem 0.375rem; border-radius: 0.25rem;
+        }
+        .note, .tip, .warning { padding: 1rem 1.25rem; border-radius: 0.75rem; margin: 1.5rem 0; font-size: 0.9375rem; }
+        .note { background: rgba(0,109,221,0.08); border-left: 4px solid var(--primary-dark); }
+        .note::before { content: "📝 注意"; display: block; font-weight: 600; color: var(--primary-dark); margin-bottom: 0.5rem; }
+        .tip { background: rgba(16,185,129,0.08); border-left: 4px solid #10b981; }
+        .tip::before { content: "💡 提示"; display: block; font-weight: 600; color: #10b981; margin-bottom: 0.5rem; }
+        .warning { background: rgba(245,158,11,0.08); border-left: 4px solid #f59e0b; }
+        .warning::before { content: "⚠️ 警告"; display: block; font-weight: 600; color: #f59e0b; margin-bottom: 0.5rem; }
+        .steps { counter-reset: step-counter; margin: 1.5rem 0; }
+        .step { counter-increment: step-counter; position: relative; padding-left: 3rem; margin-bottom: 1.5rem; }
+        .step::before {
+            content: counter(step-counter); position: absolute; left: 0; top: 0;
+            width: 2rem; height: 2rem; background: var(--primary-dark); color: white;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.875rem; font-weight: 600;
+        }
+        .step h4 { font-size: 1.125rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+        .right-sidebar {
+            width: var(--sidebar-width); position: fixed; top: 64px; right: 0; bottom: 0;
+            overflow-y: auto; padding: 2rem 1.5rem; border-left: 1px solid var(--border-color);
+        }
+        .right-sidebar .toc-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 1rem; }
+        .right-sidebar .toc-list { list-style: none; padding: 0; margin: 0; }
+        .right-sidebar .toc-item { margin-bottom: 0.25rem; }
+        .right-sidebar .toc-link {
+            display: block; padding: 0.375rem 0.75rem; font-size: 0.8125rem;
+            color: var(--text-secondary); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s ease;
+        }
+        .right-sidebar .toc-link:hover { color: var(--text-primary); background: rgba(0,109,221,0.05); }
+        .right-sidebar .toc-link.active { color: var(--primary-dark); border-left-color: var(--primary-dark); background: rgba(0,109,221,0.08); font-weight: 500; }
+        .right-sidebar .toc-link.indent-1 { padding-left: 1.5rem; font-size: 0.75rem; }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        .feature-card { padding: 1.25rem; background: var(--code-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; }
+        .feature-card h4 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+        .feature-card p { font-size: 0.875rem; color: var(--text-secondary); margin: 0; }
+        .flow-diagram { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 2rem 0; flex-wrap: wrap; }
+        .flow-step { padding: 0.75rem 1.25rem; background: white; border: 2px solid var(--primary-dark); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--primary-dark); }
+        .flow-arrow { font-size: 1.25rem; color: var(--text-muted); }
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9375rem; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border: 1px solid var(--border-color); }
+        th { background: var(--code-bg); font-weight: 600; color: var(--text-primary); }
+        td { color: var(--text-secondary); }
+        .footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .footer a {
+            display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem;
+            background: var(--code-bg); border: 1px solid var(--border-color); border-radius: 0.5rem;
+            color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; transition: all 0.15s ease;
+        }
+        .footer a:hover { background: white; border-color: var(--primary-dark); color: var(--primary-dark); }
+        @media (max-width: 1200px) {
+            .right-sidebar { display: none; }
+            .content { margin-right: 0; max-width: calc(100% - 260px); }
+        }
+        @media (max-width: 900px) {
+            .left-sidebar { display: none; }
+            .content { margin-left: 0; max-width: 100%; padding: 1.5rem; }
+        }
+        html { scroll-behavior: smooth; }
+        .highlight { animation: highlight-fade 2s ease; }
+        @keyframes highlight-fade {
+            0% { background: rgba(0,109,221,0.2); }
+            100% { background: transparent; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <a href="#" class="logo">🦜️🔗 LangChain</a>
+        <div class="breadcrumb">
+            <a href="#">文档</a> / <a href="#">Python</a> / 嵌入模型
+        </div>
+    </nav>
+    <div class="main-container">
+        <aside class="left-sidebar">
+            <div class="nav-group">
+                <div class="nav-group-title">核心概念</div>
+                <a href="retrieval.html" class="nav-item ">检索 (Retrieval)</a>
+                <a href="evaluate-rag.html" class="nav-item ">评估 RAG 应用</a>
+                <a href="retrievers.html" class="nav-item ">检索器集成</a>
+                <a href="splitters.html" class="nav-item ">文本分割器</a>
+                <a href="embeddings.html" class="nav-item active">嵌入模型</a>
+                <a href="vectorstores.html" class="nav-item ">向量存储</a>
+                <a href="document-loaders.html" class="nav-item ">文档加载器</a>
+            </div>
+        </aside>
+        <main class="content">
+            
+            <h1 id="overview">嵌入模型集成</h1>
+            <p class="subtitle">使用 LangChain Python 与嵌入模型集成。</p>
+
+            <div class="note">
+                本概览涵盖<strong>基于文本的嵌入模型</strong>。LangChain 目前不支持多模态嵌入。
+            </div>
+
+            <p>嵌入模型将原始文本（如句子、段落或推文）转换为捕获其<strong>语义含义</strong>的固定长度数值向量。这些向量允许机器基于含义而非精确词汇来比较和搜索文本。</p>
+
+            <h2 id="how-it-works">工作原理</h2>
+            <ol>
+                <li><strong>向量化</strong> — 模型将每个输入字符串编码为高维向量。</li>
+                <li><strong>相似性评分</strong> — 使用数学指标比较向量，以衡量底层文本的相关程度。</li>
+            </ol>
+
+            <p>常用相似性指标：</p>
+            <ul>
+                <li><strong>余弦相似度</strong> — 衡量两个向量之间的角度</li>
+                <li><strong>欧几里得距离</strong> — 衡量点之间的直线距离</li>
+                <li><strong>点积</strong> — 衡量一个向量在另一个向量上的投影</li>
+            </ul>
+
+            <div class="code-block">
+                <div class="code-header"><span class="lang">Python</span><span>余弦相似度计算</span></div>
+                <pre><code>import numpy as np
+
+def cosine_similarity(vec1, vec2):
+    dot = np.dot(vec1, vec2)
+    return dot / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+similarity = cosine_similarity(query_embedding, document_embedding)
+print("余弦相似度:", similarity)</code></pre>
+            </div>
+
+            <h2 id="interface">接口</h2>
+            <p>LangChain 为文本嵌入模型提供标准接口。两个主要方法：</p>
+            <ul>
+                <li><code>embed_documents(texts: List[str]) → List[List[float]]</code>：嵌入文档列表</li>
+                <li><code>embed_query(text: str) → List[float]</code>：嵌入单个查询</li>
+            </ul>
+
+            <h2 id="deployment">常见部署模式</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>☁️ 托管旗舰版</h4>
+                    <p>OpenAI <code>text-embedding-3-large</code>、Cohere <code>embed-english-v3</code>、Google <code>gemini-embedding-001</code>。一次 API 调用，开箱即用的最佳质量。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🏠 本地开源</h4>
+                    <p><code>BAAI/bge-*</code>、<code>sentence-transformers/all-*</code>。下载一次，随处运行。无调用成本，数据永不离开环境。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🎯 专业微调</h4>
+                    <p>针对特定领域、语言或任务的微调模型。通常在该领域的检索准确性上超越托管旗舰版。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🚀 生产规模自托管</h4>
+                    <p>通过 TEI 或 Ollama 服务的开源模型。提供本地推理的经济效益和托管提供商的水平扩展能力。</p>
+                </div>
+            </div>
+
+            <h2 id="factors">选择因素</h2>
+
+            <h3>质量</h3>
+            <p>从 <a href="https://huggingface.co/spaces/mteb/leaderboard">MTEB 排行榜</a>开始。MTEB 跨检索、聚类、分类和重排序任务对嵌入模型进行基准测试，是事实上的行业参考。</p>
+
+            <h3>成本</h3>
+            <p>托管嵌入通常定价在每百万 token 几美分到约 0.15 美元之间。本地推理无调用成本，但需要 CPU（慢）或 GPU（资本或云成本）。</p>
+
+            <h3>延迟</h3>
+            <p>托管嵌入 API 每个请求增加约 50-200ms 网络延迟。CPU 上的本地模型对短查询需要 10-100ms。GPU 上，本地推理通常比托管 API 的往返更快。</p>
+
+            <h3>维度</h3>
+            <p>嵌入维度影响向量存储和查询计算。典型大小：</p>
+            <ul>
+                <li>384（小型 Sentence Transformers 模型）</li>
+                <li>768（中型 ST 模型）</li>
+                <li>1024（bge-large、Cohere v3、Voyage）</li>
+                <li>1536（OpenAI text-embedding-3-small）</li>
+                <li>3072+（OpenAI text-embedding-3-large）</li>
+            </ul>
+
+            <h2 id="caching">缓存</h2>
+            <p>嵌入可以存储或临时缓存以避免重新计算。使用 <code>CacheBackedEmbeddings</code> 包装器将嵌入存储在键值存储中。</p>
+
+            <div class="code-block">
+                <div class="code-header"><span class="lang">Python</span><span>嵌入缓存</span></div>
+                <pre><code>from langchain_classic.embeddings import CacheBackedEmbeddings
+from langchain_classic.storage import LocalFileStore
+from langchain_core.vectorstores import InMemoryVectorStore
+
+underlying_embeddings = ...  # 例如 OpenAIEmbeddings()
+store = LocalFileStore("./cache/")
+
+cached_embedder = CacheBackedEmbeddings.from_bytes_store(
+    underlying_embeddings, store, namespace=underlying_embeddings.model
+)
+
+# 第一次调用
+print(cached_embedder.embed_query("Hello, world!"))
+
+# 后续调用使用缓存
+print(cached_embedder.embed_query("Hello, world!"))</code></pre>
+            </div>
+        
+            <div class="footer">
+                <a href="splitters.html">← 上一页：文本分割器</a>
+                <a href="vectorstores.html">下一页：向量存储 →</a>
+            </div>
+        </main>
+        <aside class="right-sidebar">
+            <div class="toc-title">本页目录</div>
+            <ul class="toc-list">
+                <li class="toc-item"><a href="#overview" class="toc-link">概览</a></li>
+<li class="toc-item"><a href="#how-it-works" class="toc-link">工作原理</a></li>
+<li class="toc-item"><a href="#interface" class="toc-link">接口</a></li>
+<li class="toc-item"><a href="#top-integrations" class="toc-link">顶级集成</a></li>
+<li class="toc-item"><a href="#deployment" class="toc-link">部署模式</a></li>
+<li class="toc-item"><a href="#factors" class="toc-link">选择因素</a></li>
+<li class="toc-item"><a href="#caching" class="toc-link">缓存</a></li>
+            </ul>
+        </aside>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tocLinks = document.querySelectorAll('.toc-link');
+            const sections = [];
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    const section = document.getElementById(href.substring(1));
+                    if (section) sections.push({ link, section });
+                }
+            });
+            function updateActiveSection() {
+                const scrollPos = window.scrollY + 100;
+                let currentSection = null;
+                sections.forEach(({ link, section }) => {
+                    if (section.offsetTop <= scrollPos) currentSection = { link, section };
+                });
+                tocLinks.forEach(link => link.classList.remove('active'));
+                if (currentSection) currentSection.link.classList.add('active');
+            }
+            window.addEventListener('scroll', updateActiveSection);
+            updateActiveSection();
+            tocLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const target = document.getElementById(href.substring(1));
+                        if (target) {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            target.classList.add('highlight');
+                            setTimeout(() => target.classList.remove('highlight'), 2000);
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

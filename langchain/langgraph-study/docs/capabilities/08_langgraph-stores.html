@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>存储 - LangGraph</title>
+    <style>
+        :root {
+            --color-bg: #ffffff;
+            --color-text: #1a1a2e;
+            --color-text-secondary: #4a4a6a;
+            --color-heading: #0f0f23;
+            --color-accent: #4f46e5;
+            --color-accent-light: #eef2ff;
+            --color-border: #e2e8f0;
+            --color-code-bg: #1e1e2e;
+            --color-code-text: #cdd6f4;
+            --color-blockquote-bg: #f8fafc;
+            --color-blockquote-border: #4f46e5;
+            --color-table-header: #f1f5f9;
+            --color-table-row-alt: #f8fafc;
+            --color-toc-active: #4f46e5;
+            --color-link: #4f46e5;
+            --color-link-hover: #3730a3;
+            --sidebar-width: 260px;
+            --content-max-width: 820px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+            line-height: 1.75;
+            color: var(--color-text);
+            background: var(--color-bg);
+            font-size: 16px;
+        }
+
+        /* Layout */
+        .page-wrapper {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .content {
+            flex: 1;
+            max-width: var(--content-max-width);
+            min-width: 0;
+            padding: 3rem 2rem 6rem;
+        }
+
+        /* TOC Sidebar */
+        .toc-sidebar {
+            position: sticky;
+            top: 2rem;
+            width: var(--sidebar-width);
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
+            padding: 2rem 0 2rem 1.5rem;
+            flex-shrink: 0;
+            align-self: flex-start;
+        }
+
+        .toc-sidebar::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .toc-sidebar::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+
+        .toc-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .toc-list {
+            list-style: none;
+            border-left: 2px solid var(--color-border);
+        }
+
+        .toc-list li {
+            margin: 0;
+        }
+
+        .toc-list a {
+            display: block;
+            padding: 0.3rem 0 0.3rem 1rem;
+            font-size: 0.82rem;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-left: 2px solid transparent;
+            margin-left: -2px;
+            transition: color 0.15s, border-color 0.15s;
+            line-height: 1.5;
+        }
+
+        .toc-list a:hover {
+            color: var(--color-accent);
+        }
+
+        .toc-list a.active {
+            color: var(--color-toc-active);
+            border-left-color: var(--color-toc-active);
+            font-weight: 500;
+        }
+
+        .toc-list .toc-h3 {
+            padding-left: 2rem;
+            font-size: 0.78rem;
+        }
+
+        @media (max-width: 1100px) {
+            .toc-sidebar {
+                display: none;
+            }
+
+            .page-wrapper {
+                padding: 0 1rem;
+            }
+
+            .content {
+                padding: 2rem 0 4rem;
+            }
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--color-heading);
+            margin-bottom: 0.75rem;
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.55rem;
+            font-weight: 650;
+            color: var(--color-heading);
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+            letter-spacing: -0.015em;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--color-heading);
+            margin-top: 2.25rem;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.01em;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--color-text);
+        }
+
+        a {
+            color: var(--color-link);
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: var(--color-link-hover);
+            text-decoration: underline;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.35rem;
+        }
+
+        li > ul, li > ol {
+            margin-top: 0.35rem;
+            margin-bottom: 0;
+        }
+
+        /* Blockquotes */
+        blockquote {
+            background: var(--color-blockquote-bg);
+            border-left: 4px solid var(--color-blockquote-border);
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.95rem;
+        }
+
+        blockquote p {
+            margin-bottom: 0.5rem;
+            color: var(--color-text-secondary);
+        }
+
+        blockquote p:last-child {
+            margin-bottom: 0;
+        }
+
+        blockquote strong {
+            color: var(--color-heading);
+        }
+
+        /* Code */
+        code {
+            font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.875em;
+            background: #f1f5f9;
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            color: #c7254e;
+        }
+
+        pre {
+            background: var(--color-code-bg);
+            color: var(--color-code-text);
+            padding: 1.25rem 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1.25rem 0;
+            font-size: 0.875rem;
+            line-height: 1.65;
+            border: 1px solid #313244;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            color: inherit;
+            font-size: inherit;
+        }
+
+        /* Tables */
+        .table-wrapper {
+            overflow-x: auto;
+            margin: 1.25rem 0;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background: var(--color-table-header);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 2px solid var(--color-border);
+            color: var(--color-heading);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 0.7rem 1rem;
+            border-bottom: 1px solid var(--color-border);
+            vertical-align: top;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:nth-child(even) td {
+            background: var(--color-table-row-alt);
+        }
+
+        td code, th code {
+            font-size: 0.82em;
+            background: #f1f5f9;
+            padding: 0.1em 0.35em;
+            border-radius: 3px;
+        }
+
+        /* Images */
+        .img-wrapper {
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+
+        .img-wrapper img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .img-caption {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* Inline formatting */
+        strong {
+            font-weight: 600;
+            color: var(--color-heading);
+        }
+
+        /* HR */
+        hr {
+            border: none;
+            border-top: 1px solid var(--color-border);
+            margin: 2.5rem 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 1.75rem; }
+            h2 { font-size: 1.3rem; }
+            h3 { font-size: 1.1rem; }
+            pre { font-size: 0.8rem; padding: 1rem; }
+            .content { padding: 1.5rem 0 3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <main class="content">
+            <h1>存储</h1>
+
+            <blockquote>
+                <p>在 <a href="https://docs.langchain.com/llms.txt">https://docs.langchain.com/llms.txt</a> 获取完整文档索引。</p>
+                <p>使用此文件发现所有可用页面，然后再进一步探索。</p>
+            </blockquote>
+
+            <p>LangGraph 存储提供跨线程的长期记忆，补充每个线程检查点持久化。</p>
+
+            <p>存储允许代理跨线程持久化信息，包括用户偏好、积累的知识以及应保留超出单次对话范围的事实。与检查点（保存限定到一个线程的完整图状态）不同，存储保存可从任何线程访问的任意键值数据。</p>
+
+            <div class="img-wrapper">
+                <img src="https://mintcdn.com/langchain-5e9cc07a/dL5Sn6Cmy9pwtY0V/oss/images/shared_state.png?fit=max&auto=format&n=dL5Sn6Cmy9pwtY0V&q=85&s=354526fb48c5eb11b4b2684a2df40d6c" alt="共享状态模型">
+                <div class="img-caption">共享状态模型</div>
+            </div>
+
+            <blockquote>
+                <p><strong>Agent Server 自动处理存储</strong></p>
+                <p>使用 Agent Server 时，您不需要手动实现或配置存储。API 会在幕后为您处理所有存储基础设施。</p>
+            </blockquote>
+
+            <blockquote>
+                <p><code>InMemoryStore</code> 适用于开发和测试。对于生产环境，请使用持久化存储，如 <code>PostgresStore</code>、<code>MongoDBStore</code> 或 <code>RedisStore</code>。所有实现都扩展 <code>BaseStore</code>，这是在节点函数签名中使用的类型注解。</p>
+            </blockquote>
+
+            <h2 id="basic-usage">基本用法</h2>
+
+            <p>以下代码片段展示了不使用 LangGraph 时 <code>InMemoryStore</code> 的独立用法：</p>
+
+            <pre><code>from langgraph.store.memory import InMemoryStore
+store = InMemoryStore()</code></pre>
+
+            <p>记忆按 <code>tuple</code> 进行命名空间划分，在以下示例中为 <code>(&lt;user_id&gt;, "memories")</code>。命名空间可以是任意长度并表示任何内容，不一定是特定于用户的。</p>
+
+            <pre><code>user_id = "1"
+namespace_for_memory = (user_id, "memories")</code></pre>
+
+            <p>使用 <code>store.put</code> 方法将记忆保存到存储中的命名空间。指定上面定义的命名空间，以及记忆的键值对：键只是记忆的唯一标识符（<code>memory_id</code>），值（字典）就是记忆本身。</p>
+
+            <pre><code>memory_id = str(uuid.uuid4())
+memory = {"food_preference" : "I like pizza"}
+store.put(namespace_for_memory, memory_id, memory)</code></pre>
+
+            <p>使用 <code>store.search</code> 方法从命名空间读取记忆，该方法返回给定用户的记忆列表，上限为 <code>limit</code> 参数（默认 <code>10</code>）。使用 <code>InMemoryStore</code> 时，项目按插入顺序返回，因此最新的记忆在列表的最后；其他后端可能以不同方式排序（参见<a href="#listing-items">列出命名空间中的项目</a>）。</p>
+
+            <pre><code>memories = store.search(namespace_for_memory)
+memories[-1].dict()
+{'value': {'food_preference': 'I like pizza'},
+ 'key': '07e0caf4-1631-47b7-b15f-65515d4c1843',
+ 'namespace': ['1', 'memories'],
+ 'created_at': '2024-10-02T17:22:31.590602+00:00',
+ 'updated_at': '2024-10-02T17:22:31.590605+00:00'}</code></pre>
+
+            <p>每种记忆类型都是一个 Python 类（<code>Item</code>），具有特定属性。我们可以通过使用 <code>.dict</code> 转换将其作为字典访问。</p>
+
+            <p>它具有的属性有：</p>
+
+            <ul>
+                <li><code>value</code>：此记忆的值（本身是字典）</li>
+                <li><code>key</code>：此记忆在此命名空间中的唯一键</li>
+                <li><code>namespace</code>：字符串元组，此记忆类型的命名空间
+                    <blockquote>
+                        <p>虽然类型是 <code>tuple[str, ...]</code>，但在转换为 JSON 时可能会被序列化为列表（例如 <code>['1', 'memories']</code>）。</p>
+                    </blockquote>
+                </li>
+                <li><code>created_at</code>：此记忆创建时的时间戳</li>
+                <li><code>updated_at</code>：此记忆更新时的时间戳</li>
+            </ul>
+
+            <h2 id="listing-items">列出命名空间中的项目</h2>
+
+            <p>调用 <code>store.search</code>（或异步的 <code>store.asearch</code>）时不带 <code>query</code> 和 <code>filter</code>，会返回存储在 <code>namespace_prefix</code> 下的项目，上限为 <code>limit</code>。当您不需要语义排序时，使用此方法枚举命名空间中的所有内容。</p>
+
+            <pre><code># 返回存储在 ("alice", "memories") 下的最多 100 个项目。
+items = store.search(("alice", "memories"), limit=100)</code></pre>
+
+            <p>需要记住的三个行为：</p>
+
+            <ul>
+                <li><strong><code>namespace_prefix</code> 按前缀匹配，不是精确匹配。</strong><code>("alice",)</code> 也会返回 <code>("alice", "memories")</code>、<code>("alice", "preferences")</code> 等下的项目。要限制到单个层级，请传递完整命名空间或在客户端对返回的项目按 <code>item.namespace</code> 进行过滤。</li>
+                <li><strong>超过 <code>limit</code> 的结果会被静默截断。</strong>没有溢出信号——将 <code>limit</code> 设置为高于预期最大值，或使用 <code>offset</code> 进行分页。</li>
+                <li><strong>默认排序取决于存储后端。</strong><code>PostgresStore</code> 和 <code>AsyncPostgresStore</code> 按 <code>updated_at</code> 降序返回结果（最近更新的在前）。<code>InMemoryStore</code> 按插入顺序返回结果（最近插入的在最后）。不要依赖跨实现的特定顺序；如果顺序重要，请在客户端按 <code>item.updated_at</code> 排序。</li>
+            </ul>
+
+            <p>要分页浏览大型命名空间：</p>
+
+            <pre><code>page_size = 50
+offset = 0
+while True:
+    page = store.search(("alice", "memories"), limit=page_size, offset=offset)
+    if not page:
+        break
+    for item in page:
+        pass
+    offset += page_size</code></pre>
+
+            <p>要发现存在哪些命名空间（例如，在列出每个用户的记忆之前迭代所有用户），请使用 <code>store.list_namespaces</code> 或 <code>store.alist_namespaces</code>：</p>
+
+            <pre><code># 所有以 ("alice",) 开头的命名空间，截断到两级深度。
+namespaces = store.list_namespaces(prefix=("alice",), max_depth=2)</code></pre>
+
+            <h2 id="semantic-search">语义搜索</h2>
+
+            <p>除了简单检索之外，存储还支持语义搜索，允许您根据含义而不是精确匹配来查找记忆。要启用此功能，请使用嵌入模型配置存储：</p>
+
+            <pre><code>from langchain.embeddings import init_embeddings
+
+store = InMemoryStore(
+    index={
+        "embed": init_embeddings("openai:text-embedding-3-small"),  # 嵌入提供者
+        "dims": 1536,                              # 嵌入维度
+        "fields": ["food_preference", "$"]              # 要嵌入的字段
+    }
+)</code></pre>
+
+            <p>现在在搜索时，您可以使用自然语言查询来查找相关记忆：</p>
+
+            <pre><code># 查找关于食物偏好的记忆
+# （这可以在将记忆放入存储之后进行）
+memories = store.search(
+    namespace_for_memory,
+    query="What does the user like to eat?",
+    limit=3  # 返回前 3 个匹配项
+)</code></pre>
+
+            <p>您可以通过配置 <code>fields</code> 参数或在存储记忆时指定 <code>index</code> 参数来控制记忆的哪些部分被嵌入：</p>
+
+            <pre><code># 存储时指定要嵌入的字段
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {
+        "food_preference": "I love Italian cuisine",
+        "context": "Discussing dinner plans"
+    },
+    index=["food_preference"]  # 仅嵌入 "food_preferences" 字段
+)
+
+# 存储时不嵌入（仍可检索，但不可搜索）
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {"system_info": "Last updated: 2024-01-01"},
+    index=False
+)</code></pre>
+
+            <h2 id="using-in-langgraph">在 LangGraph 中使用</h2>
+
+            <p>存储与检查点协同工作：检查点将状态保存到线程（如上所述），而存储允许您存储任意信息以<em>跨</em>线程访问。如下所示，使用检查点和存储编译图。</p>
+
+            <pre><code>from dataclasses import dataclass
+from langgraph.checkpoint.memory import InMemorySaver
+
+@dataclass
+class Context:
+    user_id: str
+
+# 我们需要这个是因为我们想启用线程（对话）
+checkpointer = InMemorySaver()
+
+# ... 定义图 ...
+
+# 使用检查点和存储编译图
+builder = StateGraph(MessagesState, context_schema=Context)
+# ... 添加节点和边 ...
+graph = builder.compile(checkpointer=checkpointer, store=store)</code></pre>
+
+            <p>然后像之前一样使用 <code>thread_id</code> 调用图，同时使用 <code>user_id</code>，它作为此特定用户记忆的命名空间。</p>
+
+            <pre><code># 调用图
+config = {"configurable": {"thread_id": "1"}}
+
+# 首先让我们向 AI 打个招呼
+for update in graph.stream(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    config,
+    stream_mode="updates",
+    context=Context(user_id="1"),
+):
+    print(update)</code></pre>
+
+            <p>您可以使用 <code>Runtime</code> 对象从<em>任何节点</em>访问存储和 <code>user_id</code>。当您将其作为参数添加到节点函数时，<code>Runtime</code> 由 LangGraph 自动注入。您可以使用它来保存记忆：</p>
+
+            <pre><code>from langgraph.runtime import Runtime
+from dataclasses import dataclass
+
+@dataclass
+class Context:
+    user_id: str
+
+async def update_memory(state: MessagesState, runtime: Runtime[Context]):
+
+    # 从运行时上下文获取用户 ID
+    user_id = runtime.context.user_id
+
+    # 对记忆进行命名空间划分
+    namespace = (user_id, "memories")
+
+    # ... 分析对话并创建新记忆
+
+    # 创建新的记忆 ID
+    memory_id = str(uuid.uuid4())
+
+    # 我们创建一个新记忆
+    await runtime.store.aput(namespace, memory_id, {"memory": memory})</code></pre>
+
+            <p>您还可以从任何节点访问存储并使用 <code>store.search</code> 方法获取记忆。记忆以可转换为字典的对象列表形式返回。</p>
+
+            <pre><code>memories[-1].dict()
+{'value': {'food_preference': 'I like pizza'},
+ 'key': '07e0caf4-1631-47b7-b15f-65515d4c1843',
+ 'namespace': ['1', 'memories'],
+ 'created_at': '2024-10-02T17:22:31.590602+00:00',
+ 'updated_at': '2024-10-02T17:22:31.590605+00:00'}</code></pre>
+
+            <p>您访问记忆并在模型调用中使用它们。</p>
+
+            <pre><code>from dataclasses import dataclass
+from langgraph.runtime import Runtime
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(state: MessagesState, runtime: Runtime[Context]):
+    # 从运行时上下文获取用户 ID
+    user_id = runtime.context.user_id
+
+    # 对记忆进行命名空间划分
+    namespace = (user_id, "memories")
+
+    # 基于最新消息进行搜索
+    memories = await runtime.store.asearch(
+        namespace,
+        query=state["messages"][-1].content,
+        limit=3
+    )
+    info = "\n".join([d.value["memory"] for d in memories])
+
+    # ... 在模型调用中使用记忆</code></pre>
+
+            <p>如果您创建新线程，只要 <code>user_id</code> 相同，您仍然可以访问相同的记忆。</p>
+
+            <pre><code># 在新线程上调用图
+config = {"configurable": {"thread_id": "2"}}
+
+# 让我们再次打个招呼
+for update in graph.stream(
+    {"messages": [{"role": "user", "content": "hi, tell me about my memories"}]},
+    config,
+    stream_mode="updates",
+    context=Context(user_id="1"),
+):
+    print(update)</code></pre>
+
+            <p>当您在本地使用 LangSmith（例如在 Studio 中）或托管使用时，基础存储默认可用，您不需要在图编译期间指定它。但是，要启用语义搜索，您<strong>确实</strong>需要在 <code>langgraph.json</code> 文件中配置索引设置。例如：</p>
+
+            <pre><code>{
+    ...
+    "store": {
+        "index": {
+            "embed": "openai:text-embeddings-3-small",
+            "dims": 1536,
+            "fields": ["$"]
+        }
+    }
+}</code></pre>
+
+            <p>有关更多详细信息和配置选项，请参阅部署指南。</p>
+
+            <h2 id="build-custom-store">构建自定义存储</h2>
+
+            <p>要使用内置实现以外的存储后端，请子类化 <code>BaseStore</code> 并实现其必需方法。内置的 <code>InMemoryStore</code> 是最简单的参考实现。</p>
+
+            <h3 id="base-contract">基础契约</h3>
+
+            <p>所有五个异步方法都是必需的。同步对应方法（<code>put</code>、<code>get</code>、<code>delete</code>、<code>search</code>、<code>list_namespaces</code>）是可选的，但建议实现以兼容同步图执行。</p>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>aput(namespace, key, value, index=None)</code></td>
+                            <td>存储或覆盖单个项目</td>
+                        </tr>
+                        <tr>
+                            <td><code>aget(namespace, key)</code></td>
+                            <td>按键检索单个项目；如果缺失则返回 <code>None</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>adelete(namespace, key)</code></td>
+                            <td>删除单个项目</td>
+                        </tr>
+                        <tr>
+                            <td><code>asearch(namespace_prefix, *, query=None, filter=None, limit=10, offset=0)</code></td>
+                            <td>在命名空间前缀下搜索项目；可选地通过语义查询</td>
+                        </tr>
+                        <tr>
+                            <td><code>alist_namespaces(*, prefix=None, suffix=None, max_depth=None, limit=100, offset=0)</code></td>
+                            <td>列出匹配前缀/后缀模式的命名空间</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p>在实现之前查找确切的签名：</p>
+
+            <pre><code>import inspect
+from langgraph.store.base import BaseStore
+print(inspect.getsource(BaseStore))</code></pre>
+
+            <h3 id="namespace-design">命名空间设计</h3>
+
+            <p>命名空间是字符串元组，例如 <code>("user_id", "memories")</code>。存储实现必须支持：</p>
+
+            <ul>
+                <li><strong>前缀匹配</strong>：<code>asearch(("alice",))</code> 返回 <code>("alice",)</code>、<code>("alice", "memories")</code> 以及任何其他子命名空间下的项目。</li>
+                <li><strong>精确键查找</strong>：<code>aget(("alice", "memories"), "some-key")</code> 必须是 O(1) 或接近 O(1)。</li>
+            </ul>
+
+            <p>对于 SQL 后端，常见模式：</p>
+
+            <pre><code>CREATE TABLE store_items (
+    namespace   TEXT[] NOT NULL,
+    key         TEXT NOT NULL,
+    value       JSONB NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (namespace, key)
+);
+
+CREATE INDEX ON store_items USING gin(namespace);</code></pre>
+
+            <h3 id="serialization">序列化</h3>
+
+            <p>存储值是普通 Python 字典——不需要特殊序列化器。使用 <code>json.dumps</code> / <code>json.loads</code> 或直接使用 JSONB 列进行序列化。不要存储不可 JSON 序列化的原始 Python 对象。</p>
+
+            <h3 id="semantic-search-support">语义搜索支持</h3>
+
+            <p>如果您的后端支持向量搜索，请在 <code>asearch</code> 上实现 <code>query</code> 参数：</p>
+
+            <ul>
+                <li>接受 <code>query: str | None</code> 参数。</li>
+                <li>当 <code>query</code> 不为 <code>None</code> 时，嵌入它并按余弦相似度对结果排序。</li>
+                <li>当提供 <code>query</code> 时，结果应包含每个 <code>Item</code> 上的 <code>score</code> 字段。</li>
+            </ul>
+
+            <p>如果您的后端不支持向量搜索，当传递 <code>query</code> 时请抛出 <code>NotImplementedError</code>。</p>
+
+            <h3 id="testing">测试</h3>
+
+            <p>目前没有针对自定义存储的一致性测试套件。使用 <code>InMemoryStore</code> 作为参考进行测试：</p>
+
+            <pre><code>import pytest
+from langgraph.store.memory import InMemoryStore
+from your_module import YourStore
+
+@pytest.fixture
+async def store():
+    async with YourStore.create() as s:
+        yield s
+
+@pytest.fixture
+def reference():
+    return InMemoryStore()
+
+async def test_put_and_get(store, reference):
+    ns = ("test", "ns")
+    for s in [store, reference]:
+        await s.aput(ns, "k1", {"val": 1})
+        item = await s.aget(ns, "k1")
+        assert item is not None
+        assert item.value == {"val": 1}
+
+async def test_delete(store, reference):
+    ns = ("test", "ns")
+    for s in [store, reference]:
+        await s.aput(ns, "k1", {"val": 1})
+        await s.adelete(ns, "k1")
+        assert await s.aget(ns, "k1") is None
+
+async def test_search_prefix(store, reference):
+    for s in [store, reference]:
+        await s.aput(("user", "memories"), "m1", {"text": "likes pizza"})
+        results = await s.asearch(("user",))
+        assert any(r.key == "m1" for r in results)</code></pre>
+
+            <h3 id="next-steps">后续步骤</h3>
+
+            <ul>
+                <li>将自定义存储添加到 Agent Server — 部署您的实现</li>
+                <li>检查点 — 线程范围的状态持久化</li>
+            </ul>
+
+            <hr>
+
+            <blockquote>
+                <p>通过 MCP 将这些文档连接到 Claude、VSCode 等，获取实时答案。</p>
+            </blockquote>
+
+            <blockquote>
+                <p>在 <a href="https://github.com/langchain-ai/langgraph">GitHub</a> 上编辑此页面或提交问题。</p>
+            </blockquote>
+        </main>
+
+        <nav class="toc-sidebar" aria-label="目录">
+            <div class="toc-title">目录</div>
+            <ul class="toc-list">
+                <li><a href="#basic-usage">基本用法</a></li>
+                <li><a href="#listing-items">列出命名空间中的项目</a></li>
+                <li><a href="#semantic-search">语义搜索</a></li>
+                <li><a href="#using-in-langgraph">在 LangGraph 中使用</a></li>
+                <li><a href="#build-custom-store">构建自定义存储</a></li>
+                <li><a href="#base-contract" class="toc-h3">基础契约</a></li>
+                <li><a href="#namespace-design" class="toc-h3">命名空间设计</a></li>
+                <li><a href="#serialization" class="toc-h3">序列化</a></li>
+                <li><a href="#semantic-search-support" class="toc-h3">语义搜索支持</a></li>
+                <li><a href="#testing" class="toc-h3">测试</a></li>
+                <li><a href="#next-steps" class="toc-h3">后续步骤</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <script>
+        (function () {
+            const tocLinks = document.querySelectorAll('.toc-sidebar a');
+            const headings = [];
+
+            tocLinks.forEach(function (link) {
+                const id = link.getAttribute('href').slice(1);
+                const heading = document.getElementById(id);
+                if (heading) {
+                    headings.push({ id: id, el: heading, link: link });
+                }
+            });
+
+            function clearActive() {
+                tocLinks.forEach(function (link) {
+                    link.classList.remove('active');
+                });
+            }
+
+            function onScroll() {
+                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                var offset = 100;
+                var current = null;
+
+                for (var i = 0; i < headings.length; i++) {
+                    var top = headings[i].el.getBoundingClientRect().top + scrollTop - offset;
+                    if (scrollTop >= top) {
+                        current = headings[i];
+                    }
+                }
+
+                clearActive();
+                if (current) {
+                    current.link.classList.add('active');
+                }
+            }
+
+            var ticking = false;
+            window.addEventListener('scroll', function () {
+                if (!ticking) {
+                    window.requestAnimationFrame(function () {
+                        onScroll();
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            });
+
+            onScroll();
+        })();
+    </script>
+</body>
+</html>

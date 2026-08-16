@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>本地服务器 - LangGraph</title>
+<style>
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #f8f9fa;
+    --color-border: #e2e8f0;
+    --color-text: #1a202c;
+    --color-text-secondary: #4a5568;
+    --color-text-muted: #718096;
+    --color-primary: #2563eb;
+    --color-primary-hover: #1d4ed8;
+    --color-code-bg: #1e1e2e;
+    --color-code-text: #cdd6f4;
+    --color-toc-active: #2563eb;
+    --color-tip-bg: #ecfdf5;
+    --color-tip-border: #10b981;
+    --color-info-bg: #eff6ff;
+    --color-info-border: #3b82f6;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+    --content-max-width: 780px;
+    --toc-width: 220px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--color-text);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  a:hover { color: var(--color-primary-hover); text-decoration: underline; }
+
+  /* Layout */
+  .page-wrapper {
+    display: flex;
+    justify-content: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .content {
+    flex: 1;
+    max-width: var(--content-max-width);
+    min-width: 0;
+    padding: 3rem 0 6rem;
+  }
+
+  /* TOC sidebar */
+  .toc-sidebar {
+    position: sticky;
+    top: 2rem;
+    align-self: flex-start;
+    width: var(--toc-width);
+    flex-shrink: 0;
+    margin-left: 2rem;
+    padding-top: 3rem;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+  }
+  .toc-sidebar h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+  .toc-sidebar ul { list-style: none; }
+  .toc-sidebar li { margin: 0; }
+  .toc-sidebar a {
+    display: block;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .toc-sidebar a:hover {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border-left-color: var(--color-border);
+  }
+  .toc-sidebar a.active {
+    color: var(--color-toc-active);
+    border-left-color: var(--color-toc-active);
+    font-weight: 500;
+  }
+  .toc-sidebar a.toc-h3 {
+    padding-left: 1.5rem;
+    font-size: 0.78rem;
+  }
+
+  @media (max-width: 1099px) {
+    .toc-sidebar { display: none; }
+    .page-wrapper { padding: 0 1.25rem; }
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 2.5rem;
+    line-height: 1.6;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: 3rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border);
+    letter-spacing: -0.01em;
+    scroll-margin-top: 1.5rem;
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-text);
+    scroll-margin-top: 1.5rem;
+  }
+
+  p { margin-bottom: 1rem; }
+
+  ul, ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+  li { margin-bottom: 0.35rem; }
+
+  strong { font-weight: 600; }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 2.5rem 0;
+  }
+
+  /* Inline code */
+  :not(pre) > code {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    color: #c7254e;
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--color-code-bg);
+    color: var(--color-code-text);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.65;
+    tab-size: 2;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+
+  /* Blockquote / tips */
+  blockquote {
+    border-left: 3px solid var(--color-tip-border);
+    background: var(--color-tip-bg);
+    border-radius: 0 6px 6px 0;
+    padding: 0.8rem 1.2rem;
+    margin: 1.5rem 0;
+    font-size: 0.925rem;
+    color: #065f46;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+  blockquote strong { color: #047857; }
+
+  /* Info boxes */
+  .info-box {
+    background: var(--color-info-bg);
+    border: 1px solid var(--color-info-border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    font-size: 0.925rem;
+  }
+
+  /* Step headers */
+  .step-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .step-heading .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* Tabs */
+  .tabs {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .tab-header {
+    display: flex;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    background: none;
+    border: none;
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--color-text-secondary); background: #f1f5f9; }
+  .tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--color-bg);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .tab-panel pre { margin: 0; border-radius: 0; }
+  .tab-panel > div { padding: 1.25rem 1.5rem; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--color-border);
+  }
+  th {
+    background: var(--color-surface);
+    font-weight: 600;
+  }
+
+  /* Next steps list */
+  .next-steps li { margin-bottom: 0.6rem; }
+
+  /* Footer */
+  .page-footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+  .page-footer a { color: var(--color-text-muted); }
+  .page-footer a:hover { color: var(--color-primary); }
+
+  /* Sample output styling */
+  .sample-output pre {
+    background: #11111b;
+    border: 1px solid #313244;
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    h1 { font-size: 1.75rem; }
+    h2 { font-size: 1.3rem; }
+    pre { font-size: 0.78rem; padding: 1rem; }
+    .page-wrapper { padding: 0 1rem; }
+    .content { padding: 2rem 0 4rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="toc-sidebar" aria-label="页面目录">
+  <h4>目录</h4>
+  <ul id="toc-list"></ul>
+</nav>
+
+<div class="page-wrapper">
+  <main class="content">
+
+    <h1>运行本地服务器</h1>
+    <p class="page-description">本指南介绍如何在本地运行 LangGraph 应用程序。</p>
+
+    <h2 id="prerequisites">前提条件</h2>
+    <p>在开始之前，请确保已准备好以下内容：</p>
+    <ul>
+      <li>一个 <a href="https://smith.langchain.com/settings">LangSmith</a> 的 API 密钥 — 免费注册</li>
+    </ul>
+
+    <h2 id="install-cli">1. 安装 LangGraph CLI</h2>
+    <p><strong>pip：</strong></p>
+    <pre><code># 需要 Python >= 3.11
+pip install -U "langgraph-cli[inmem]"</code></pre>
+    <p><strong>uv：</strong></p>
+    <pre><code># 需要 Python >= 3.11
+uv add "langgraph-cli[inmem]"</code></pre>
+
+    <h2 id="create-app">2. 创建 LangGraph 应用</h2>
+    <p>从 <a href="https://github.com/langchain-ai/new-langgraph-project"><code>new-langgraph-project-python</code> 模板</a>创建一个新应用。该模板演示了一个可以扩展的单节点应用程序。</p>
+    <pre><code>langgraph new path/to/your/app --template new-langgraph-project-python</code></pre>
+    <blockquote>
+      <p><strong>提示 — 其他模板：</strong>如果运行 <code>langgraph new</code> 时不指定模板，系统会显示一个交互式菜单供你从可用模板中选择。</p>
+    </blockquote>
+
+    <h2 id="install-deps">3. 安装依赖</h2>
+    <p>在新 LangGraph 应用的根目录下，以 <code>edit</code> 模式安装依赖，这样服务器会使用本地的修改：</p>
+    <p><strong>pip：</strong></p>
+    <pre><code>cd path/to/your/app
+pip install -e .</code></pre>
+    <p><strong>uv：</strong></p>
+    <pre><code>cd path/to/your/app
+uv sync</code></pre>
+
+    <h2 id="create-env">4. 创建 <code>.env</code> 文件</h2>
+    <p>应用根目录中存在一个 <code>.env.example</code> 文件。在同一目录下创建 <code>.env</code> 文件，将 <code>.env.example</code> 的内容复制过来，并填入所需的 API 密钥：</p>
+    <pre><code>LANGSMITH_API_KEY=lsv2...</code></pre>
+
+    <h2 id="launch-server">5. 启动 Agent 服务器</h2>
+    <p>在本地启动 LangGraph API 服务器：</p>
+    <pre><code>langgraph dev</code></pre>
+    <p>示例输出：</p>
+    <div class="sample-output">
+    <pre><code>INFO:langgraph_api.cli:
+
+        Welcome to
+
+╦  ┌─┐┌┐┌┌─┐╔═╗┬─┐┌─┐┌─┐┬ ┬
+║  ├─┤││││ ┬║ ╦├┬┘├─┤├─┘├─┤
+╩═╝┴ ┴┘└┘└─┘╚═╝┴└─┴ ┴┴  ┴ ┴
+
+- 🚀 API: http://127.0.0.1:2024
+- 🎨 Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+- 📚 API Docs: http://127.0.0.1:2024/docs
+
+This in-memory server is designed for development and testing.
+For production use, please use LangSmith Deployment.</code></pre>
+    </div>
+    <p><code>langgraph dev</code> 命令以内存模式启动 Agent Server。此模式适合开发和测试。如需用于生产环境，请使用持久化存储后端进行部署。详情请参阅<a href="/langsmith/platform-setup">平台设置概述</a>。</p>
+
+    <h2 id="test-studio">6. 在 Studio 中测试应用</h2>
+    <p><a href="/langsmith/studio">Studio</a> 是一个专用的 UI，用于在本地<strong>可视化、交互和调试</strong>你的应用程序。请访问 <code>langgraph dev</code> 输出中的 Studio URL：</p>
+    <pre><code>- LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024</code></pre>
+    <p>如需自定义主机/端口，请更新 <code>baseUrl</code> 查询参数。例如 <code>http://myhost:3000</code>：</p>
+    <pre><code>https://smith.langchain.com/studio/?baseUrl=http://myhost:3000</code></pre>
+    <blockquote>
+      <p><strong>Safari 兼容性：</strong>Safari 连接 localhost 服务器存在限制，请在命令中使用 <code>--tunnel</code> 标志来创建安全隧道：</p>
+    </blockquote>
+    <pre><code>langgraph dev --tunnel</code></pre>
+
+    <h2 id="test-api">7. 测试 API</h2>
+
+    <div class="tabs" data-tab-group="api-test">
+      <div class="tab-header">
+        <button class="tab-btn active" data-tab="async">Python SDK（异步）</button>
+        <button class="tab-btn" data-tab="sync">Python SDK（同步）</button>
+        <button class="tab-btn" data-tab="rest">REST API</button>
+      </div>
+      <div class="tab-panel active" data-tab-panel="async">
+        <div>
+          <p>1. 安装 LangGraph Python SDK：</p>
+          <pre><code>pip install langgraph-sdk</code></pre>
+          <p>2. 向助手发送消息（无线程运行）：</p>
+          <pre><code>from langgraph_sdk import get_client
+import asyncio
+
+client = get_client(url="http://localhost:2024")
+
+async def main():
+    async for chunk in client.runs.stream(
+        None,  # 无线程运行
+        "agent", # 助手名称，在 langgraph.json 中定义
+        input={
+        "messages": [{
+            "role": "human",
+            "content": "What is LangGraph?",
+            }],
+        },
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+        print("\n\n")
+
+asyncio.run(main())</code></pre>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel="sync">
+        <div>
+          <p>1. 安装 LangGraph Python SDK：</p>
+          <pre><code>pip install langgraph-sdk</code></pre>
+          <p>2. 向助手发送消息（无线程运行）：</p>
+          <pre><code>from langgraph_sdk import get_sync_client
+
+client = get_sync_client(url="http://localhost:2024")
+
+for chunk in client.runs.stream(
+    None,  # 无线程运行
+    "agent", # 助手名称，在 langgraph.json 中定义
+    input={
+        "messages": [{
+            "role": "human",
+            "content": "What is LangGraph?",
+        }],
+    },
+    stream_mode="messages-tuple",
+):
+    print(f"Receiving new event of type: {chunk.event}...")
+    print(chunk.data)
+    print("\n\n")</code></pre>
+        </div>
+      </div>
+      <div class="tab-panel" data-tab-panel="rest">
+        <div>
+          <pre><code>curl -s --request POST \
+    --url "http://localhost:2024/runs/stream" \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"assistant_id\": \"agent\",
+        \"input\": {
+            \"messages\": [
+                {
+                    \"role\": \"human\",
+                    \"content\": \"What is LangGraph?\"
+                }
+            ]
+        },
+        \"stream_mode\": \"messages-tuple\"
+    }"</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <h2 id="next-steps">后续步骤</h2>
+    <p>现在你已经在本地运行了一个 LangGraph 应用，可以继续探索以下内容：</p>
+    <ul class="next-steps">
+      <li><a href="/langsmith/deployment-quickstart">部署快速入门</a>：通过 LangSmith 部署你的 LangGraph 应用。</li>
+      <li><a href="/langsmith/observability">LangSmith</a>：了解 LangSmith 的基础概念。</li>
+      <li><a href="https://reference.langchain.com/python/langsmith/deployment/sdk/">SDK 参考文档</a>：探索 SDK API 参考。</li>
+    </ul>
+
+    <footer class="page-footer">
+      <p>通过 MCP 将这些文档连接到 Claude、VSCode 等工具，获取实时回答。<a href="/use-these-docs">/use-these-docs</a></p>
+      <p><a href="https://github.com/langchain-ai/docs/edit/main/src/oss/langgraph/local-server.mdx">在 GitHub 上编辑此页面</a> | <a href="https://github.com/langchain-ai/docs/issues/new/choose">提交问题</a></p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function() {
+  // Build TOC from h2 and h3
+  const tocList = document.getElementById('toc-list');
+  const headings = document.querySelectorAll('h2[id], h3[id]');
+  headings.forEach(function(h) {
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent;
+    a.className = h.tagName === 'H3' ? 'toc-h3' : 'toc-h2';
+    a.dataset.target = h.id;
+    li.appendChild(a);
+    tocList.appendChild(li);
+  });
+
+  // Scroll highlight
+  var tocLinks = tocList.querySelectorAll('a');
+  var headingEls = [];
+  tocLinks.forEach(function(link) {
+    var target = document.getElementById(link.dataset.target);
+    if (target) headingEls.push({ el: target, link: link });
+  });
+
+  function updateActive() {
+    var scrollY = window.scrollY + 80;
+    var current = null;
+    for (var i = 0; i < headingEls.length; i++) {
+      if (headingEls[i].el.offsetTop <= scrollY) {
+        current = headingEls[i];
+      }
+    }
+    tocLinks.forEach(function(l) { l.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+
+  // Tabs
+  document.querySelectorAll('.tabs').forEach(function(tabGroup) {
+    var btns = tabGroup.querySelectorAll('.tab-btn');
+    var panels = tabGroup.querySelectorAll('.tab-panel');
+    btns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        btns.forEach(function(b) { b.classList.remove('active'); });
+        panels.forEach(function(p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        var target = btn.dataset.tab;
+        tabGroup.querySelector('[data-tab-panel="' + target + '"]').classList.add('active');
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangGraph 概述</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.8;
+            color: #1a1a2e;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* 主内容区 */
+        .content {
+            max-width: 820px;
+            padding: 2rem 2.5rem;
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* 右侧导航 */
+        .toc {
+            position: sticky;
+            top: 2rem;
+            width: 240px;
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
+            padding: 1.5rem 1rem 1.5rem 1.5rem;
+            flex-shrink: 0;
+            margin-left: 2rem;
+            border-left: 1px solid #e2e6ea;
+            align-self: flex-start;
+        }
+        .toc-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #8892a4;
+            margin-bottom: 0.8rem;
+        }
+        .toc ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        .toc li {
+            margin-bottom: 0.15rem;
+        }
+        .toc a {
+            display: block;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.85rem;
+            color: #6b7280;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            border-left: 2px solid transparent;
+            margin-left: -1px;
+        }
+        .toc a:hover {
+            color: #4a6cf7;
+            background: #f0f4ff;
+        }
+        .toc a.active {
+            color: #4a6cf7;
+            font-weight: 600;
+            background: #eef2ff;
+            border-left-color: #4a6cf7;
+        }
+        .toc a.indent {
+            padding-left: 1.2rem;
+            font-size: 0.8rem;
+        }
+
+        /* 响应式：小屏幕隐藏 TOC */
+        @media (max-width: 1100px) {
+            .toc { display: none; }
+            .content { max-width: 100%; padding: 1.5rem; }
+        }
+
+        h1 {
+            font-size: 2.4rem;
+            color: #0f0f23;
+            margin-bottom: 1rem;
+            border-bottom: 3px solid #4a6cf7;
+            padding-bottom: 0.5rem;
+        }
+        h2 {
+            font-size: 1.6rem;
+            color: #16213e;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            border-left: 4px solid #4a6cf7;
+            scroll-margin-top: 1.5rem;
+        }
+        h3 {
+            font-size: 1.25rem;
+            color: #333;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            scroll-margin-top: 1.5rem;
+        }
+        p { margin-bottom: 1rem; }
+        blockquote {
+            background: #eef2ff;
+            border-left: 4px solid #4a6cf7;
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        blockquote p { margin-bottom: 0; }
+        code {
+            background: #f1f3f5;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: "Fira Code", "Consolas", monospace;
+        }
+        pre {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            padding: 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        ul, ol {
+            margin: 1rem 0 1rem 2rem;
+        }
+        li { margin-bottom: 0.5rem; }
+        a {
+            color: #4a6cf7;
+            text-decoration: none;
+        }
+        a:hover { text-decoration: underline; }
+        strong { color: #0f0f23; }
+        details {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+        }
+        summary {
+            font-weight: 600;
+            cursor: pointer;
+            color: #4a6cf7;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #dee2e6;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 右侧章节导航 -->
+<nav class="toc" aria-label="章节导航">
+    <div class="toc-title">本页目录</div>
+    <ul>
+        <li><a href="#install">安装</a></li>
+        <li><a href="#install-pip" class="indent">pip</a></li>
+        <li><a href="#install-uv" class="indent">uv</a></li>
+        <li><a href="#core-benefits">核心优势</a></li>
+        <li><a href="#ecosystem">LangGraph 生态系统</a></li>
+        <li><a href="#eco-langsmith-obs" class="indent">LangSmith 可观测性</a></li>
+        <li><a href="#eco-langsmith-deploy" class="indent">LangSmith 部署</a></li>
+        <li><a href="#eco-langchain" class="indent">LangChain</a></li>
+        <li><a href="#acknowledgements">致谢</a></li>
+    </ul>
+</nav>
+
+<!-- 主内容 -->
+<div class="content">
+
+<h1>LangGraph 概述</h1>
+
+<blockquote>
+    <p>通过 LangGraph 获得控制力，设计能够可靠处理复杂任务的智能体</p>
+</blockquote>
+
+<p>LangGraph 受到众多塑造智能体未来的公司信赖——包括 Klarna、Uber、摩根大通等——它是一个低层级的编排框架和运行时，用于构建、管理和部署长时间运行的有状态智能体。LangGraph 为您提供"细粒度的控制能力，将确定性的手写步骤与 LLM 驱动的智能体步骤混合在同一个图中"，从而打造适合您应用需求的定制化智能体。</p>
+
+<p>LangGraph 是一个非常底层的框架，完全专注于智能体<strong>编排</strong>。在使用 LangGraph 之前，我们建议您先熟悉构建智能体所用的一些组件，从<a href="https://docs.langchain.com/oss/python/langchain/models">模型</a>和<a href="https://docs.langchain.com/oss/python/langchain/tools">工具</a>开始。</p>
+
+<p>我们在文档中通常会使用 <a href="https://docs.langchain.com/oss/python/langchain/overview">LangChain</a> 组件来集成模型和工具，但使用 LangGraph 并不强制要求使用 LangChain。如果您刚接触智能体，或者需要更高层级的抽象，我们建议您使用 LangChain 的<a href="https://docs.langchain.com/oss/python/langchain/agents">智能体</a>，它为常见的 LLM 和工具调用循环提供了预构建的架构。</p>
+
+<p>LangGraph 专注于对智能体编排至关重要的底层能力：持久化执行、流式传输、人机协作等。</p>
+
+<p>LangGraph 的核心优势之一是能够在单个图中混合确定性步骤与 LLM 驱动的智能体步骤。这让您可以构建定制化的工作流，其中部分逻辑完全可预测和可审计，而其他部分则灵活且由模型驱动，从而对 AI 的应用位置和方式拥有精确的控制。</p>
+
+<details>
+    <summary>LangChain 产品如何协同工作</summary>
+    <ul>
+        <li><strong>Deep Agents</strong> 是一个<a href="https://docs.langchain.com/oss/python/concepts/products#agent-harnesses-like-the-deep-agents-sdk">智能体框架</a>：在 LangGraph 之上提供规划、子智能体、文件系统工具和上下文管理。</li>
+        <li><strong>LangChain</strong> 是智能体框架：提供模型、工具和智能体循环的抽象与集成。</li>
+        <li><strong>LangGraph</strong> 是编排运行时：提供持久化执行、流式传输、人机协作和持久化存储。</li>
+        <li><strong>LangSmith</strong> 是一个平台，提供跨框架的追踪、评估、提示词管理和部署功能。</li>
+        <li><strong>LangSmith Engine</strong> 能检测 LangGraph 智能体追踪中的问题并提出修复建议。您可以直接从 Engine 标签页打开包含修复建议的 Pull Request。</li>
+        <li><strong>LangSmith Fleet</strong> 是一个无代码智能体构建器，支持模板、集成和常规自动化。</li>
+    </ul>
+    <p>阅读<a href="https://docs.langchain.com/oss/python/concepts/products">框架、运行时与框架对比</a>了解开源技术栈的比较。</p>
+</details>
+
+<h2 id="install">安装</h2>
+
+<h3 id="install-pip">pip</h3>
+<pre><code>pip install -U langgraph</code></pre>
+
+<h3 id="install-uv">uv</h3>
+<pre><code>uv add langgraph</code></pre>
+
+<p>然后，创建一个简单的 Hello World 示例：</p>
+
+<pre><code>from langgraph.graph import StateGraph, MessagesState, START, END
+
+def mock_llm(state: MessagesState):
+    return {"messages": [{"role": "ai", "content": "你好，世界"}]}
+
+graph = StateGraph(MessagesState)
+graph.add_node(mock_llm)
+graph.add_edge(START, "mock_llm")
+graph.add_edge("mock_llm", END)
+graph = graph.compile()
+
+graph.invoke({"messages": [{"role": "user", "content": "你好！"}]})</code></pre>
+
+<blockquote>
+    <p><strong>提示：</strong>使用 <a href="https://docs.langchain.com/langsmith/observability">LangSmith</a> 来追踪请求、调试智能体行为和评估输出。设置 <code>LANGSMITH_TRACING=true</code> 并配置您的 API 密钥即可开始。按照<a href="https://docs.langchain.com/langsmith/trace-with-langchain">追踪快速入门</a>进行设置。我们还建议您设置 <a href="https://docs.langchain.com/langsmith/engine">LangSmith Engine</a>，它可以监控您的追踪、检测问题并提出修复建议。</p>
+</blockquote>
+
+<h2 id="core-benefits">核心优势</h2>
+
+<p>LangGraph 为<em>任何</em>长时间运行的有状态工作流或智能体提供低层级的基础支撑。LangGraph 不会抽象提示词或架构，并提供以下核心优势：</p>
+
+<ul>
+    <li><strong>混合确定性与智能体步骤</strong>：在单个图中将手写的确定性逻辑与 LLM 驱动的决策相结合。在需要可靠性和可预测性的地方使用确定性步骤，在需要灵活性的地方使用智能体步骤——让您精确控制智能体行为的每个部分。</li>
+    <li><strong><a href="https://docs.langchain.com/oss/python/langgraph/persistence">持久化</a></strong>：构建能够在故障后持久化并可长时间运行的智能体，从中断处恢复执行。</li>
+    <li><strong><a href="https://docs.langchain.com/oss/python/langgraph/interrupts">人机协作</a></strong>：通过在任意节点检查和修改智能体状态，融入人工监督。</li>
+    <li><strong><a href="https://docs.langchain.com/oss/python/concepts/memory">全面的记忆能力</a></strong>：创建具有短期工作记忆（用于当前推理）和长期跨会话记忆的有状态智能体。</li>
+    <li><strong><a href="https://docs.langchain.com/langsmith/observability">使用 LangSmith 调试</a></strong>：通过可视化工具深入洞察复杂智能体行为，追踪执行路径、捕获状态转换并提供详细的运行时指标。</li>
+    <li><strong><a href="https://docs.langchain.com/langsmith/deployment">生产就绪的部署</a></strong>：使用专为处理有状态长时间运行工作流的独特挑战而设计的可扩展基础设施，自信地部署复杂的智能体系统。</li>
+</ul>
+
+<h2 id="ecosystem">LangGraph 生态系统</h2>
+
+<p>虽然 LangGraph 可以独立使用，但它也能与任何 LangChain 产品无缝集成，为开发者提供构建智能体的完整工具套件。要提升您的 LLM 应用开发体验，可以将 LangGraph 与以下产品搭配使用：</p>
+
+<h3 id="eco-langsmith-obs">LangSmith 可观测性</h3>
+<p>在一个地方追踪请求、评估输出和监控部署。使用 LangGraph 在本地快速原型开发，然后通过集成的可观测性和评估功能移至生产环境，构建更可靠的智能体系统。</p>
+<p><a href="https://docs.langchain.com/langsmith/observability">了解更多 →</a></p>
+
+<h3 id="eco-langsmith-deploy">LangSmith 部署</h3>
+<p>使用专为长时间运行的有状态工作流打造的专用部署平台，轻松部署和扩展智能体。跨团队发现、复用、配置和共享智能体——并使用 Studio 中的可视化原型功能快速迭代。</p>
+<p><a href="https://docs.langchain.com/langsmith/deployment">了解更多 →</a></p>
+
+<h3 id="eco-langchain">LangChain</h3>
+<p>提供集成和可组合组件，简化 LLM 应用开发。包含基于 LangGraph 构建的智能体抽象。</p>
+<p><a href="https://docs.langchain.com/oss/python/langchain/overview">了解更多 →</a></p>
+
+<h2 id="acknowledgements">致谢</h2>
+
+<p>LangGraph 的设计灵感来源于 <a href="https://research.google/pubs/pub37252/">Pregel</a> 和 <a href="https://beam.apache.org/">Apache Beam</a>。其公共接口的设计灵感来自 <a href="https://networkx.org/documentation/latest/">NetworkX</a>。LangGraph 由 LangChain Inc（LangChain 的创建者）构建，但可以不依赖 LangChain 独立使用。</p>
+
+<hr>
+
+<p style="color: #666; font-size: 0.9rem;">
+    原文来源：<a href="https://docs.langchain.com/oss/python/langgraph/overview">https://docs.langchain.com/oss/python/langgraph/overview</a><br>
+    翻译日期：2026-07-26
+</p>
+
+</div>
+
+<!-- 滚动高亮脚本 -->
+<script>
+(function() {
+    const links = document.querySelectorAll('.toc a');
+    const sections = [];
+    links.forEach(link => {
+        const id = link.getAttribute('href').slice(1);
+        const el = document.getElementById(id);
+        if (el) sections.push({ id, el, link });
+    });
+
+    function update() {
+        let current = sections[0];
+        for (const s of sections) {
+            if (s.el.getBoundingClientRect().top <= 80) current = s;
+        }
+        links.forEach(l => l.classList.remove('active'));
+        if (current) current.link.classList.add('active');
+    }
+
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+})();
+</script>
+
+</body>
+</html>
