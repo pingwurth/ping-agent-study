@@ -33,410 +33,655 @@ Claude Code 中的 Skills：
   - Agent 也可以根据上下文自动检测需要的技能
   - 技能文件会被展开为完整的 prompt 注入到对话中
 """
-
+import ast
+import json
 import os
 import sys
-import json
-from typing import Optional
+import subprocess
+from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from common import create_client
 
-# ============================================================
+# ── readline 中文修复 ──────────────────────────────────────
+try:
+    import readline
+
+    readline.parse_and_bind('set bind-tty-special-chars off')
+    readline.parse_and_bind('set input-meta on')
+    readline.parse_and_bind('set output-meta on')
+    readline.parse_and_bind('set convert-meta off')
+except ImportError:
+    pass
+
+# ═══════════════════════════════════════════════════════════
 # 初始化客户端
-# ============================================================
+# ═══════════════════════════════════════════════════════════
 client, MODEL = create_client()
+WORKDIR = Path.cwd()
+SKILLS_DIR = WORKDIR / "skills"
+CURRENT_TODOS: list[dict] = []
 
 
-# ════════════════════════════════════════════════════════════
-# 第一部分：技能定义
-# ════════════════════════════════════════════════════════════
+# s07: Skill catalog scan (used by build_system below)
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from SKILL.md. Returns (meta, body)."""
+    if not text.startswith("---"):
+        return {}, text
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}, text
+    try:
+        meta = yaml.safe_load(parts[1]) or {}
+    except yaml.YAMLError:
+        meta = {}
+    return meta, parts[2].strip()
 
-# 每个技能包含以下字段：
-#   - name:        技能名称（用于 /skill-name 触发）
-#   - description: 简短描述（用于列表展示）
-#   - trigger:     触发条件（什么时候应该使用这个技能）
-#   - prompt:      技能的完整提示词（核心内容）
-#
-# prompt 是技能的核心：它定义了 Agent 在执行此技能时应该遵循的步骤。
-# 这些提示词通常很长，包含详细的步骤说明和最佳实践。
 
-SKILLS = {
-    "commit": {
-        "name": "commit",
-        "description": "生成规范的 git commit 消息",
-        "trigger": "用户要求提交代码时",
-        "prompt": """你正在执行 /commit 技能。按以下步骤操作：
+# Build skill registry at startup (used for safe lookup in load_skill)
+SKILL_REGISTRY: dict[str, dict] = {}
 
-步骤 1：分析变更
-- 运行 `git status` 查看所有变更的文件
-- 运行 `git diff` 查看具体修改内容
-- 运行 `git log --oneline -5` 查看最近的提交风格
 
-步骤 2：确定提交类型
-根据变更的性质选择合适的类型：
-  feat:     新功能
-  fix:      Bug 修复
-  refactor: 重构（不改变功能）
-  docs:     文档更新
-  test:     测试相关
-  chore:    构建/工具变更
-  perf:     性能优化
-  ci:       CI/CD 相关
+def _scan_skills():
+    """Scan skills/ dir, populate SKILL_REGISTRY with name/description/content."""
+    if not SKILLS_DIR.exists():
+        return
+    for d in sorted(SKILLS_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        manifest = d / "SKILL.md"
+        if manifest.exists():
+            raw = manifest.read_text()
+            meta, body = _parse_frontmatter(raw)
+            name = meta.get("name", d.name)
+            desc = meta.get("description", raw.split("\n")[0].lstrip("#").strip())
+            SKILL_REGISTRY[name] = {"name": name, "description": desc, "content": raw}
 
-步骤 3：生成提交消息
-格式：<type>: <description>
-  - description 用中文简明描述变更内容
-  - 如果有多个不相关的变更，建议分开提交
 
-步骤 4：执行提交
-- 使用 `git add` 暂存相关文件
-- 使用 `git commit` 提交
-- 不要自动 push，除非用户明确要求""",
-    },
+_scan_skills()
 
-    "review-pr": {
-        "name": "review-pr",
-        "description": "审查 Pull Request",
-        "trigger": "用户要求审查 PR 时",
-        "prompt": """你正在执行 /review-pr 技能。按以下步骤审查：
 
-步骤 1：获取变更
-- 运行 `git diff main...HEAD` 查看所有变更
-- 运行 `git log main..HEAD` 查看提交历史
+def list_skills() -> str:
+    """List all skills (name + one-line description)."""
+    if not SKILL_REGISTRY:
+        return "(no skills found)"
+    return "\n".join(f"- **{s['name']}**: {s['description']}" for s in SKILL_REGISTRY.values())
 
-步骤 2：安全性检查（优先级最高）
-- 是否有硬编码的密钥、密码、API Key
-- 是否有 SQL 注入风险（字符串拼接查询）
-- 是否有 XSS 漏洞（未转义的用户输入）
-- 是否有路径遍历风险
-- 是否缺少 CSRF 保护
 
-步骤 3：代码质量检查
-- 函数是否过长（建议 < 50 行）
-- 文件是否过大（建议 < 800 行）
-- 嵌套是否过深（建议 < 4 层）
-- 是否有重复代码
-- 命名是否清晰
+# s07: SYSTEM includes skill catalog (cheap — just names + descriptions)
+def build_system() -> str:
+    """Build SYSTEM prompt with skill catalog injected at startup."""
+    catalog = list_skills()
+    return (
+        f"You are a coding agent at {WORKDIR}. "
+        f"Skills available:\n{catalog}\n"
+        "Use load_skill to get full details when needed."
+    )
 
-步骤 4：测试覆盖检查
-- 新功能是否有对应的测试
-- 测试是否覆盖了边界情况
-- 测试是否独立且可重复
 
-步骤 5：输出审查报告
-按严重程度分类：
-  CRITICAL: 安全漏洞或数据丢失风险（必须修复）
-  HIGH:     Bug 或重大质量问题（应该修复）
-  MEDIUM:   可维护性问题（建议修复）
-  LOW:      风格或次要建议（可选）""",
-    },
+SYSTEM = build_system()
 
-    "tdd-workflow": {
-        "name": "tdd-workflow",
-        "description": "测试驱动开发工作流",
-        "trigger": "用户要求实现新功能或修复 bug 时",
-        "prompt": """你正在执行 /tdd-workflow 技能。严格按 TDD 流程执行：
+# s07: subagent gets its own system prompt — no skill loading, no task
+SUB_SYSTEM = (
+    f"You are a coding agent at {WORKDIR}. "
+    "Complete the task you were given, then return a concise summary. "
+    "Do not delegate further."
+)
 
-═══ RED 阶段（先写测试）═══
-1. 根据需求分析要测试的行为
-2. 编写失败的测试用例
-   - 使用 AAA 模式：Arrange - Act - Assert
-   - 测试名称应该描述期望的行为
-   - 包含正常路径和边界情况
-3. 运行测试，确认它确实失败
-   - 如果测试意外通过，说明需求理解有误
 
-═══ GREEN 阶段（最小实现）═══
-4. 编写最少的代码让测试通过
-   - 不要添加测试未覆盖的功能
-   - 不要考虑代码质量，只要能通过
-5. 运行测试，确认它通过
+# ═══════════════════════════════════════════════════════════
+#  Tool Implementations
+# ═══════════════════════════════════════════════════════════
+def safe_path(p: str) -> Path:
+    path = (WORKDIR / p).resolve()
+    if not path.is_relative_to(WORKDIR):
+        raise ValueError(f"Path escapes workspace: {p}")
+    return path
 
-═══ REFACTOR 阶段（重构优化）═══
-6. 在测试保护下重构代码
-   - 提取重复逻辑
-   - 改善命名
-   - 简化复杂逻辑
-7. 运行测试，确认仍然通过
 
-═══ 验证 ═══
-8. 检查测试覆盖率 >= 80%
-9. 确保所有测试都是绿色
+def run_bash(command: str) -> str:
+    try:
+        r = subprocess.run(command, shell=True, cwd=WORKDIR,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr).strip()
+        return out[:50000] if out else "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: Timeout (120s)"
 
-关键原则：
-  - 永远不要在没有失败测试的情况下写实现代码
-  - 测试应该描述行为，而不是实现细节
-  - 每次只让一个测试从红变绿""",
-    },
 
-    "security-review": {
-        "name": "security-review",
-        "description": "安全审查（OWASP Top 10）",
-        "trigger": "涉及认证、支付、用户数据的代码变更",
-        "prompt": """你正在执行 /security-review 技能。按 OWASP Top 10 逐项检查：
+def run_read(path: str, limit: int | None = None) -> str:
+    try:
+        lines = safe_path(path).read_text().splitlines()
+        if limit and limit < len(lines):
+            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
 
-1. 注入攻击（Injection）
-   - SQL 注入：检查所有数据库查询是否使用参数化
-   - NoSQL 注入：检查 MongoDB 等查询
-   - OS 命令注入：检查 subprocess/system 调用
 
-2. 认证失效（Broken Authentication）
-   - 密码策略：最小长度、复杂度要求
-   - 会话管理：session 超时、安全 cookie 标志
-   - 多因素认证：关键操作是否要求二次验证
+def run_write(path: str, content: str) -> str:
+    try:
+        file_path = safe_path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content)
+        return f"Wrote {len(content)} bytes to {path}"
+    except Exception as e:
+        return f"Error: {e}"
 
-3. 敏感数据暴露（Sensitive Data Exposure）
-   - 传输加密：是否使用 HTTPS
-   - 存储加密：密码是否使用 bcrypt/argon2
-   - 日志脱敏：日志中是否包含敏感信息
 
-4. XXE（XML External Entities）
-   - XML 解析是否禁用外部实体
+def run_edit(path: str, old_text: str, new_text: str) -> str:
+    try:
+        file_path = safe_path(path)
+        text = file_path.read_text()
+        if old_text not in text:
+            return f"Error: text not found in {path}"
+        file_path.write_text(text.replace(old_text, new_text, 1))
+        return f"Edited {path}"
+    except Exception as e:
+        return f"Error: {e}"
 
-5. 访问控制（Broken Access Control）
-   - IDOR：是否通过 ID 直接访问资源
-   - 权限检查：每个接口是否验证权限
 
-6. 安全配置错误（Security Misconfiguration）
-   - 默认密码是否修改
-   - 错误信息是否泄露实现细节
-   - 不必要的服务是否关闭
+def run_glob(pattern: str) -> str:
+    import glob as g
+    try:
+        results = []
+        for match in g.glob(pattern, root_dir=WORKDIR):
+            if (WORKDIR / match).resolve().is_relative_to(WORKDIR):
+                results.append(match)
+        return "\n".join(results) if results else "(no matches)"
+    except Exception as e:
+        return f"Error: {e}"
 
-7. XSS（Cross-Site Scripting）
-   - 反射型：URL 参数是否转义
-   - 存储型：用户输入是否净化
-   - DOM 型：前端是否安全处理
 
-8. 不安全的反序列化（Insecure Deserialization）
-   - 是否反序列化不可信的数据
+def _normalize_todos(todos):
+    if isinstance(todos, str):
+        try:
+            todos = json.loads(todos)
+        except json.JSONDecodeError:
+            try:
+                todos = ast.literal_eval(todos)
+            except (SyntaxError, ValueError):
+                return None, "Error: todos must be a list or JSON array string"
+    if not isinstance(todos, list):
+        return None, "Error: todos must be a list"
+    for i, t in enumerate(todos):
+        if not isinstance(t, dict):
+            return None, f"Error: todos[{i}] must be an object"
+        if "content" not in t or "status" not in t:
+            return None, f"Error: todos[{i}] missing 'content' or 'status'"
+        if t["status"] not in ("pending", "in_progress", "completed"):
+            return None, f"Error: todos[{i}] has invalid status '{t['status']}'"
+    return todos, None
 
-9. 已知漏洞的组件（Using Components with Known Vulnerabilities）
-   - 依赖版本是否过时
 
-10. 日志和监控不足（Insufficient Logging）
-    - 安全事件是否记录
-    - 是否有异常检测机制
+def run_todo_write(todos: list) -> str:
+    global CURRENT_TODOS
+    todos, error = _normalize_todos(todos)
+    if error:
+        return error
+    CURRENT_TODOS = todos
+    lines = ["\n\033[33m## Current Tasks\033[0m"]
+    for t in CURRENT_TODOS:
+        icon = {"pending": " ", "in_progress": "\033[36m▸\033[0m", "completed": "\033[32m✓\033[0m"}[t["status"]]
+        lines.append(f"  [{icon}] {t['content']}")
+    print("\n".join(lines))
+    return f"Updated {len(CURRENT_TODOS)} tasks"
 
-输出安全审查报告，标注每个发现的风险等级。""",
-    },
+
+# ═══════════════════════════════════════════════════════════
+#  Subagent — fresh messages[], summary only
+# ═══════════════════════════════════════════════════════════
+SUB_TOOLS = [
+    {"name": "bash", "description": "Run a shell command.",
+     "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
+    {"name": "read_file", "description": "Read file contents.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+    {"name": "write_file", "description": "Write content to a file.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+                      "required": ["path", "content"]}},
+    {"name": "edit_file", "description": "Replace exact text in a file once.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "old_text": {"type": "string"},
+                                                       "new_text": {"type": "string"}},
+                      "required": ["path", "old_text", "new_text"]}},
+    {"name": "glob", "description": "Find files matching a glob pattern.",
+     "input_schema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
+]
+# NO "task" tool — prevent recursive spawning
+
+SUB_HANDLERS = {
+    "bash": run_bash, "read_file": run_read, "write_file": run_write,
+    "edit_file": run_edit, "glob": run_glob,
 }
 
 
-# ════════════════════════════════════════════════════════════
-# 第二部分：SkillManager - 技能管理器
-# ════════════════════════════════════════════════════════════
+def extract_text(content) -> str:
+    """Extract text from message content blocks."""
+    if not isinstance(content, list):
+        return str(content)
+    return "\n".join(getattr(b, "text", "") for b in content if getattr(b, "type", None) == "text")
 
-class SkillManager:
-    """
-    管理和触发技能。
 
-    技能的工作流程：
-      ① 用户输入 /skill-name 或 Agent 识别匹配的技能
-      ② SkillManager 查找对应的技能定义
-      ③ 将技能的 prompt 注入到系统提示词中
-      ④ Agent 按照技能的指导执行任务
+def spawn_subagent(description: str) -> str:
+    """Spawn a subagent with fresh messages[], return summary only."""
+    print(f"\n\033[35m[Subagent spawned]\033[0m")
+    messages = [{"role": "user", "content": description}]  # fresh context
 
-    关键方法：
-      - list_skills():   列出所有可用技能
-      - activate():      激活指定技能，返回其 prompt
-      - detect_skill():  根据用户输入自动检测应该使用的技能
-    """
+    for _ in range(30):  # safety limit
+        response = client.messages.create(
+            model=MODEL, system=SUB_SYSTEM,
+            messages=messages, tools=SUB_TOOLS, max_tokens=8000,
+        )
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
+            break
+        results = []
+        for block in response.content:
+            if block.type == "tool_use":
+                # Issue 1: subagent also runs hooks (permissions apply)
+                blocked = trigger_hooks("PreToolUse", block)
+                if blocked:
+                    results.append({"type": "tool_result", "tool_use_id": block.id,
+                                    "content": str(blocked)})
+                    continue
+                handler = SUB_HANDLERS.get(block.name)
+                output = handler(**block.input) if handler else f"Unknown: {block.name}"
+                trigger_hooks("PostToolUse", block, output)
+                print(f"  \033[90m[sub] {block.name}: {str(output)[:100]}\033[0m")
+                results.append({"type": "tool_result", "tool_use_id": block.id,
+                                "content": output})
+        messages.append({"role": "user", "content": results})
 
-    def __init__(self):
-        self.skills = SKILLS.copy()
-        self.active_skill: Optional[str] = None
+    # Issue 5: fallback if safety limit hit during tool_use
+    result = extract_text(messages[-1]["content"])
+    if not result:
+        # last message is tool_result, look backwards for assistant text
+        for msg in reversed(messages):
+            if msg["role"] == "assistant":
+                result = extract_text(msg["content"])
+                if result:
+                    break
+        if not result:
+            result = "Subagent stopped after 30 turns without final answer."
+    print(f"\033[35m[Subagent done]\033[0m")
+    return result  # only summary, entire message history discarded
 
-    def list_skills(self) -> list[dict]:
-        """
-        列出所有可用技能。
 
-        Returns:
-            list[dict]: 技能列表，每个包含 name 和 description
-        """
-        return [
-            {"name": s["name"], "description": s["description"]}
-            for s in self.skills.values()
-        ]
+# ═══════════════════════════════════════════════════════════
+#  NEW in s07: load_skill — runtime full content loading
+# ═══════════════════════════════════════════════════════════
+def load_skill(name: str) -> str:
+    """Load full skill content. Lookup via registry — no path traversal."""
+    skill = SKILL_REGISTRY.get(name)
+    if not skill:
+        return f"Skill not found: {name}"
+    return skill["content"]
 
-    def activate(self, skill_name: str) -> Optional[str]:
-        """
-        激活一个技能，返回其 prompt。
 
-        激活后的 prompt 应该被注入到系统提示词中，
-        让 Agent 在后续对话中按照技能的指导执行。
+# ═══════════════════════════════════════════════════════════
+#   Tool Definitions & Dispatch
+# ═══════════════════════════════════════════════════════════
 
-        Args:
-            skill_name: 技能名称
-
-        Returns:
-            str 或 None: 技能的 prompt，如果技能不存在返回 None
-        """
-        skill = self.skills.get(skill_name)
-        if not skill:
-            return None
-
-        self.active_skill = skill_name
-        return skill["prompt"]
-
-    def detect_skill(self, user_input: str) -> Optional[str]:
-        """
-        根据用户输入自动检测应该使用的技能。
-
-        检测策略（按优先级）：
-          1. 显式触发：检查是否包含 /skill-name
-          2. 关键词匹配：检查是否包含相关关键词
-
-        Args:
-            user_input: 用户输入文本
-
-        Returns:
-            str 或 None: 匹配的技能名称，无匹配返回 None
-        """
-        input_lower = user_input.lower()
-
-        # 检查显式的 /skill-name 触发
-        for name in self.skills:
-            if f"/{name}" in input_lower:
-                return name
-
-        # 关键词匹配
-        # 注意：实际应用中应该使用更智能的匹配方式
-        # 这里为了演示简单使用关键词
-        keyword_map = {
-            "commit": ["提交", "commit", "git commit", "git push"],
-            "review-pr": ["审查", "review", "pr", "pull request", "代码审查"],
-            "tdd-workflow": ["测试", "test", "tdd", "单元测试", "写测试"],
-            "security-review": ["安全", "security", "漏洞", "owasp", "安全审查"],
+TOOLS = [
+    {
+        "name": "bash",
+        "description": "Run a shell command.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "command"
+            ]
         }
+    },
+    {
+        "name": "read_file",
+        "description": "Read file contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "path"
+            ]
+        }
+    },
+    {
+        "name": "write_file",
+        "description": "Write content to a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "content"
+            ]
+        }
+    },
+    {
+        "name": "edit_file",
+        "description": "Replace exact text in a file once.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "old_text": {
+                    "type": "string"
+                },
+                "new_text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "old_text",
+                "new_text"
+            ]
+        }
+    },
+    {
+        "name": "glob",
+        "description": "Find files matching a glob pattern.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "pattern"
+            ]
+        }
+    },
+    {
+        "name": "todo_write",
+        "description": "Create and manage a task list for your current coding session.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "pending",
+                                    "in_progress",
+                                    "completed"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "content",
+                            "status"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "todos"
+            ]
+        }
+    },
+    {
+        "name": "task",
+        "description": "Launch a subagent to handle a complex subtask. Returns only the final conclusion.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "description"
+            ]
+        }
+    },
+    {
+        "name": "load_skill",
+        "description": "Load the full content of a skill by name.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
+            ]
+        }
+    }
+]
 
-        for skill_name, keywords in keyword_map.items():
-            if any(word in input_lower for word in keywords):
-                return skill_name
+TOOL_HANDLERS = {
+    "bash": run_bash, "read_file": run_read, "write_file": run_write,
+    "edit_file": run_edit, "glob": run_glob, "todo_write": run_todo_write,
+    "task": spawn_subagent, "load_skill": load_skill,
+}
 
-        return None
+# ═══════════════════════════════════════════════════════════
+#  Hook System
+# ═══════════════════════════════════════════════════════════
+HOOKS = {"UserPromptSubmit": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}
 
 
-# ════════════════════════════════════════════════════════════
-# 第三部分：Agent 集成（技能注入到系统提示词）
-# ════════════════════════════════════════════════════════════
+def register_hook(event: str, callback):
+    HOOKS[event].append(callback)
 
-def build_system_prompt_with_skill(skill_prompt: Optional[str] = None) -> str:
+
+def trigger_hooks(event: str, *args):
+    for callback in HOOKS[event]:
+        result = callback(*args)
+        if result is not None:
+            return result
+    return None
+
+
+# s03 permission check logic, now wrapped as a hook
+DENY_LIST = ["rm -rf /", "sudo", "shutdown", "reboot", "mkfs", "dd if="]
+DESTRUCTIVE = ["rm ", "> /etc/", "chmod 777"]
+
+
+def permission_hook(block):
+    """PreToolUse: s03 check_permission() logic moved here."""
+    if block.name == "bash":
+        for pattern in DENY_LIST:
+            if pattern in block.input.get("command", ""):
+                print(f"\n\033[31m⛔ Blocked: '{pattern}'\033[0m")
+                return "Permission denied by deny list"
+        for kw in DESTRUCTIVE:
+            if kw in block.input.get("command", ""):
+                print(f"\n\033[33m⚠  Potentially destructive command\033[0m")
+                print(f"   Tool: {block.name}({block.input})")
+                choice = input("   Allow? [y/N] ").strip().lower()
+                if choice not in ("y", "yes"):
+                    return "Permission denied by user"
+    if block.name in ("read_file", "write_file", "edit_file"):
+        path = block.input.get("path", "")
+        if not (WORKDIR / path).resolve().is_relative_to(WORKDIR):
+            print(f"\n\033[33m⚠  Access outside workspace\033[0m")
+            print(f"   Tool: {block.name}({block.input})")
+            choice = input("   Allow? [y/N] ").strip().lower()
+            if choice not in ("y", "yes"):
+                return "Permission denied by user"
+    return None
+
+
+def log_hook(block):
+    """PreToolUse: log every tool call."""
+    args_preview = str(list(block.input.values())[:2])[:60]
+    print(f"\033[90m[HOOK] {block.name}({args_preview})\033[0m")
+    return None
+
+
+def large_output_hook(block, output):
+    """PostToolUse: warn on large output."""
+    if len(str(output)) > 100000:
+        print(f"\033[33m[HOOK] ⚠ Large output from {block.name}: {len(str(output))} chars\033[0m")
+    return None
+
+
+# UserPromptSubmit hook: log user input before it reaches the LLM
+def context_inject_hook(query: str):
+    print(f"\033[90m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
+    return None
+
+
+# Stop hook: print summary when loop is about to exit
+def summary_hook(messages: list):
+    tool_count = sum(1 for m in messages
+                     for b in (m.get("content") if isinstance(m.get("content"), list) else [])
+                     if isinstance(b, dict) and b.get("type") == "tool_result")
+    print(f"\033[90m[HOOK] Stop: session used {tool_count} tool calls\033[0m")
+    return None
+
+
+register_hook("UserPromptSubmit", context_inject_hook)
+register_hook("PreToolUse", permission_hook)
+register_hook("PreToolUse", log_hook)
+register_hook("PostToolUse", large_output_hook)
+register_hook("Stop", summary_hook)
+
+
+# ═══════════════════════════════════════════════════════════
+#  agent_loop — with check_permission() inserted
+# ═══════════════════════════════════════════════════════════
+def agent_loop(messages: list, is_auto_approve: bool = False) -> bool:
     """
-    构建包含技能的系统提示词。
+    带 Hook 系统和 Todo 提醒的 Agent 循环。
 
-    当技能被激活时，它的 prompt 会被注入到系统提示词中。
-    这样 Agent 在处理用户请求时，会遵循技能定义的流程。
+    在 u04 Hook 系统的基础上新增 todo_write 工具的调度逻辑：
+
+      1. 每次模型发起工具调用，rounds_since_todo 自增 1
+      2. 若连续 3 轮未调用 todo_write → 注入 <reminder> 提醒 LLM 更新任务列表
+      3. 调用 todo_write 后 rounds_since_todo 重置为 0
+
+    目的：长对话中防止 Agent "迷路"，通过周期性提醒保持任务列表的时效性。
 
     Args:
-        skill_prompt: 技能的 prompt（如果有的话）
+        messages: 对话消息列表（会被原地追加 assistant/tool_result 消息）
+        is_auto_approve: 是否自动允许所有工具调用（默认 False）
 
     Returns:
-        str: 完整的系统提示词
+        is_auto_approve 的当前值，供调用方决定后续交互是否继续跳过确认
     """
-    base_prompt = f"""你是一个编程助手，工作在 {os.getcwd()} 目录。
-用中文回复。"""
+    rounds_since_todo = 0
+    while True:
+        # 超过 3 轮提示 LLM 更新 todo list
+        if rounds_since_todo >= 3 and messages:
+            messages.append({"role": "user",
+                             "content": "<reminder>Update your todos.</reminder>"})
+            rounds_since_todo = 0
 
-    if skill_prompt:
-        return f"{base_prompt}\n\n{skill_prompt}"
-    return base_prompt
+        response = client.messages.create(
+            model=MODEL, max_tokens=8096, system=SYSTEM,
+            tools=TOOLS,
+            messages=messages,
+        )
+        messages.append({"role": "assistant", "content": response.content})
+
+        if response.stop_reason != "tool_use":
+            force = trigger_hooks("Stop", messages)
+            if force:
+                messages.append({"role": "user", "content": force})
+                continue
+            return is_auto_approve
+
+        rounds_since_todo += 1
+
+        tool_results = []
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+
+            # 工具执行前 HOOK: 权限检查放在这里实现
+            blocked = trigger_hooks("PreToolUse", block)
+            if blocked:
+                tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(blocked)})
+                continue
+
+            handler = TOOL_HANDLERS.get(block.name)
+            output = handler(**block.input) if handler else f"Unknown: {block.name}"
+
+            # 工具执行后 HOOK
+            trigger_hooks("PostToolUse", block, output)
+
+            if block.name == "todo_write":
+                rounds_since_todo = 0
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": output,
+            })
+
+        messages.append({"role": "user", "content": tool_results})
+
+    return is_auto_approve
 
 
-def run_with_skill(query: str, skill_manager: SkillManager) -> str:
+def print_response_content(content):
     """
-    使用技能运行 Agent。
+    打印模型回复的内容块。
 
-    流程：
-      1. 检测是否需要激活技能
-      2. 如果需要，激活技能并注入 prompt
-      3. 调用 Claude API
-
-    Args:
-        query:          用户输入
-        skill_manager:  技能管理器实例
-
-    Returns:
-        str: Agent 的回答
+    Anthropic API 返回的 content 是一个列表，每个元素是一个 content block：
+      - type="text"：普通文本，模型的自然语言回复
     """
-    # 自动检测技能
-    detected_skill = skill_manager.detect_skill(query)
-    skill_prompt = None
-
-    if detected_skill:
-        print(f"  [自动检测] 激活技能: /{detected_skill}")
-        skill_prompt = skill_manager.activate(detected_skill)
-
-    # 构建系统提示词
-    system_prompt = build_system_prompt_with_skill(skill_prompt)
-
-    # 调用 Claude API
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": query}],
-    )
-
-    # 提取回答文本
-    result = ""
-    for block in response.content:
-        if hasattr(block, "text"):
-            result += block.text
-    return result
+    if isinstance(content, list):
+        for block in content:
+            if block.type == "text":
+                print(f"\n{block.text}")
 
 
-# ════════════════════════════════════════════════════════════
-# 第四部分：程序入口
-# ════════════════════════════════════════════════════════════
-
+# ============================================================
+# 程序入口：交互式 REPL
+# ============================================================
 if __name__ == "__main__":
-    print("=" * 60)
-    print("  U07 - Skills（技能系统）演示")
-    print("=" * 60)
+    print("输入问题，回车发送。输入 q 退出。")
 
-    manager = SkillManager()
+    history = []
+    auto_approve = False
+    while True:
+        try:
+            # 用户输入
+            user_input = input("\033[36ms01 >> \033[0m").strip()
+            if user_input.lower() in ("q", "exit", "quit", ""): break
+        except (EOFError, KeyboardInterrupt):
+            break  # Ctrl+D 退出, Ctrl+C 退出
 
-    # ── 演示 1：列出所有技能 ──
-    print("\n── 可用技能列表 ──\n")
-    for skill in manager.list_skills():
-        print(f"  /{skill['name']:<20} {skill['description']}")
+        # 触发 HOOK: 用户输入提交后、进入 LLM 前
+        trigger_hooks("UserPromptSubmit", user_input)
+        # 输入追加到消息历史
+        history.append({"role": "user", "content": user_input})
 
-    # ── 演示 2：激活技能并查看 prompt ──
-    print("\n\n── 激活 /tdd-workflow 技能 ──\n")
-    prompt = manager.activate("tdd-workflow")
-    if prompt:
-        print("技能 prompt 预览（前 500 字符）：")
-        print("-" * 50)
-        print(prompt[:500])
-        print("-" * 50)
-        print(f"总长度: {len(prompt)} 字符")
-
-    # ── 演示 3：自动检测技能 ──
-    print("\n\n── 自动检测技能演示 ──\n")
-    test_inputs = [
-        "帮我提交代码",
-        "审查这个 PR",
-        "为这个函数写测试",
-        "检查一下安全性",
-        "帮我写个排序算法",      # 无匹配技能
-        "帮我做一次安全审查",    # 匹配 security-review
-        "/commit",              # 显式触发
-    ]
-
-    for inp in test_inputs:
-        detected = manager.detect_skill(inp)
-        skill_name = f"/{detected}" if detected else "无匹配"
-        print(f"  '{inp}' → {skill_name}")
-
-    # ── 演示 4：技能 prompt 结构 ──
-    print("\n\n── 所有技能的 prompt 结构 ──\n")
-    for name, skill in SKILLS.items():
-        print(f"  /{name}:")
-        print(f"    描述: {skill['description']}")
-        print(f"    触发: {skill['trigger']}")
-        print(f"    prompt 长度: {len(skill['prompt'])} 字符")
-        # 显示 prompt 的前几行
-        first_lines = skill["prompt"].split("\n")[:3]
-        for line in first_lines:
-            print(f"    | {line}")
+        auto_approve = agent_loop(history, is_auto_approve=auto_approve)
         print()
+        print("-" * 100)
+        print_response_content(history[-1]['content'])

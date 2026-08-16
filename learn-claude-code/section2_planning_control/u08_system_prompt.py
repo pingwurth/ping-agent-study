@@ -31,441 +31,321 @@ Claude Code 的 System Prompt 结构：
   - Claude Code 的 system prompt 经过精心设计和反复迭代
 """
 
-import os
+import os, json
 import sys
-import json
-from datetime import datetime
+import subprocess
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from common import create_client
 
+# ── readline 中文修复 ──────────────────────────────────────
+# macOS 默认使用 libedit 而非 GNU readline，在处理中文输入时
+# 退格键（Backspace）会出错。以下配置可修复该问题。
+try:
+    import readline
+
+    readline.parse_and_bind('set bind-tty-special-chars off')
+    readline.parse_and_bind('set input-meta on')
+    readline.parse_and_bind('set output-meta on')
+    readline.parse_and_bind('set convert-meta off')
+except ImportError:
+    # Windows 或精简环境可能没有 readline，忽略即可
+    pass
+
 # ============================================================
 # 初始化客户端
 # ============================================================
+WORKDIR = Path.cwd()
 client, MODEL = create_client()
+MEMORY_DIR = WORKDIR / ".memory"
+MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
+
+# ═══════════════════════════════════════════════════════════
+#  Prompt Sections
+# ═══════════════════════════════════════════════════════════
+PROMPT_SECTIONS = {
+    "identity": "You are a coding agent. Act, don't explain.",
+}
 
 
-# ════════════════════════════════════════════════════════════
-# 第一部分：System Prompt 的各个 Section
-# ════════════════════════════════════════════════════════════
-
-# Claude Code 的 system prompt 由多个 section 组成。
-# 每个 section 负责定义 Agent 的一个方面。
-# 这种模块化设计使得 system prompt 易于维护和扩展。
-
-SECTION_ROLE = """You are an interactive agent that helps users with software engineering tasks.
-You are operating in the directory: {working_dir}
-Platform: {platform}
-Current git branch: {git_branch}"""
-
-SECTION_TOOL_GUIDE = """## Tool Usage Guidelines
-- Use dedicated tools instead of bash when available
-- Read files with the Read tool, not cat/head/tail
-- Edit files with the Edit tool, not sed/awk
-- Search files with Glob and Grep tools
-- Use Bash only for system commands that require shell execution
-- Use WebFetch for fetching web content
-- Use WebSearch for searching the web"""
-
-SECTION_BEHAVIOR = """## Behavior Guidelines
-- Be concise and direct in responses
-- Prefer editing existing files over creating new ones
-- Don't add features beyond what was asked
-- Don't add comments to code you didn't change
-- Verify before destructive operations
-- Ask for clarification when requirements are ambiguous
-- Use Chinese when the user communicates in Chinese"""
-
-SECTION_SAFETY = """## Safety Rules
-- Never expose secrets or credentials in output
-- Don't execute destructive commands without confirmation
-- Validate inputs before processing
-- Handle errors gracefully, don't crash
-- Log important operations for auditability"""
-
-
-# ════════════════════════════════════════════════════════════
-# 第二部分：build_system_prompt() - 动态构建
-# ════════════════════════════════════════════════════════════
-
-def build_system_prompt(
-    working_dir: str,
-    platform: str = "linux",
-    git_branch: str = "main",
-    rules: list[str] = None,
-    extra_sections: dict[str, str] = None,
-) -> str:
-    """
-    动态构建完整的 System Prompt。
-
-    Claude Code 在每次 API 调用时都会重新构建 system prompt，
-    因为环境信息（如 git 状态、当前目录）可能随时变化。
-
-    构建顺序：
-      1. 角色定义（包含环境信息）
-      2. 工具使用指南
-      3. 行为规范
-      4. 安全规则
-      5. 项目规则（从 CLAUDE.md 加载）
-      6. 额外 sections（如日期、技能等）
-
-    Args:
-        working_dir:     当前工作目录
-        platform:        操作系统平台（linux / darwin / win32）
-        git_branch:      当前 git 分支名
-        rules:           从 CLAUDE.md 和 rules/ 加载的规则列表
-        extra_sections:  额外的 prompt section（标题 → 内容）
-
-    Returns:
-        str: 完整的 system prompt 文本
-    """
+def assemble_system_prompt(context: dict) -> str:
+    """Select and join prompt sections based on current context."""
     sections = []
 
-    # Section 1: 角色定义（包含环境信息）
-    sections.append(SECTION_ROLE.format(
-        working_dir=working_dir,
-        platform=platform,
-        git_branch=git_branch,
-    ))
+    # Always loaded — identity
+    sections.append(PROMPT_SECTIONS["identity"])
 
-    # Section 2: 工具使用指南
-    sections.append(SECTION_TOOL_GUIDE)
+    # Dynamic — tools and workspace from context
+    tools = ", ".join(context.get("enabled_tools", []))
+    if tools:
+        sections.append(f"Available tools: {tools}.")
+    sections.append(f"Working directory: {context.get("workspace", WORKDIR)}")
 
-    # Section 3: 行为规范
-    sections.append(SECTION_BEHAVIOR)
-
-    # Section 4: 安全规则
-    sections.append(SECTION_SAFETY)
-
-    # Section 5: 项目规则
-    # 在 Claude Code 中，规则从以下位置加载：
-    #   - 项目根目录的 CLAUDE.md
-    #   - ~/.claude/CLAUDE.md（全局规则）
-    #   - ~/.claude/rules/ 中的规则文件
-    if rules:
-        rules_text = "\n".join(f"- {rule}" for rule in rules)
-        sections.append(f"## Rules\n{rules_text}")
-
-    # Section 6: 额外 sections
-    # 用于注入动态信息，如当前日期、git 状态等
-    if extra_sections:
-        for title, content in extra_sections.items():
-            sections.append(f"## {title}\n{content}")
+    # Conditional — memory loaded when MEMORY.md exists and has content
+    memories = context.get("memories", "")
+    if memories:
+        sections.append(f"Relevant memories:\n{memories}")
 
     return "\n\n".join(sections)
 
 
-# ════════════════════════════════════════════════════════════
-# 第三部分：SystemPromptBuilder - 构建器模式
-# ════════════════════════════════════════════════════════════
+_last_context_key = None
+_last_prompt = None
 
-class SystemPromptBuilder:
+
+def get_system_prompt(context: dict) -> str:
+    """Cache wrapper — reassemble only when context changes.
+
+    Uses json.dumps for deterministic serialization, not Python's hash()
+    which has process randomization and fails on nested dicts/lists.
+    This cache only avoids redundant string assembly within a process.
+    Real Claude Code additionally protects API-level prompt cache via
+    stable section ordering and SYSTEM_PROMPT_DYNAMIC_BOUNDARY.
     """
-    System Prompt 构建器。
+    global _last_context_key, _last_prompt
+    key = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
+    if key == _last_context_key and _last_prompt:
+        print("  \033[90m[cache hit] system prompt unchanged\033[0m")
+        return _last_prompt
+    _last_context_key = key
+    _last_prompt = assemble_system_prompt(context)
 
-    使用构建器模式（Builder Pattern）来组装 system prompt。
-    这种设计使得 prompt 的构建过程更加灵活和可读。
+    loaded = ["identity", "tools", "workspace"]
+    if context.get("memories"):
+        loaded.append("memory")
+    print(f"  \033[32m[assembled] sections: {', '.join(loaded)}\033[0m")
+    return _last_prompt
 
-    使用示例：
-        builder = SystemPromptBuilder("/home/user/project")
-        builder.add_rule("测试覆盖率不低于 80%")
-        builder.add_section("Current Date", "2026-07-31")
-        prompt = builder.build()
 
-    Claude Code 中的动态部分包括：
-      - 当前日期
-      - Git 状态（分支、未提交的变更）
-      - 可用的 MCP 服务器
-      - 活动的 Skills
-      - Todo 列表状态
-      - 用户的 CLAUDE.md 规则
+# ═══════════════════════════════════════════════════════════
+#   Tool Definitions & Dispatch
+# ═══════════════════════════════════════════════════════════
+def safe_path(p: str) -> Path:
+    path = (WORKDIR / p).resolve()
+    if not path.is_relative_to(WORKDIR):
+        raise ValueError(f"Path escapes workspace: {p}")
+    return path
+
+
+def run_bash(command: str) -> str:
+    try:
+        r = subprocess.run(command, shell=True, cwd=WORKDIR,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr).strip()
+        return out[:50000] if out else "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: Timeout (120s)"
+
+
+def run_read(path: str, limit: int | None = None) -> str:
+    try:
+        lines = safe_path(path).read_text().splitlines()
+        if limit and limit < len(lines):
+            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_write(path: str, content: str) -> str:
+    try:
+        file_path = safe_path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content)
+        return f"Wrote {len(content)} bytes to {path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+TOOLS = [
+    {
+        "name": "bash",
+        "description": "Run a shell command.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "command"
+            ]
+        }
+    },
+    {
+        "name": "read_file",
+        "description": "Read file contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "path"
+            ]
+        }
+    },
+    {
+        "name": "write_file",
+        "description": "Write content to a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "content"
+            ]
+        }
+    }
+]
+
+TOOL_HANDLERS = {"bash": run_bash, "read_file": run_read, "write_file": run_write}
+
+
+# ═══════════════════════════════════════════════════════════
+#  Context
+# ═══════════════════════════════════════════════════════════
+def update_context(context: dict, messages: list) -> dict:
+    """Derive context from real state: which tools exist, whether memory files exist."""
+    memories = ""
+    if MEMORY_INDEX.exists():
+        content = MEMORY_INDEX.read_text().strip()
+        if content:
+            memories = content
+    return {
+        "enabled_tools": list(TOOL_HANDLERS.keys()),
+        "workspace": str(WORKDIR),
+        "memories": memories,
+    }
+
+
+def print_response_content(content):
     """
+    打印模型回复的内容块。
 
-    def __init__(self, working_dir: str):
-        """
-        初始化构建器。
+    Anthropic API 返回的 content 是一个列表，每个元素是一个 content block：
+      - type="text"：普通文本，模型的自然语言回复
+    """
+    if isinstance(content, list):
+        for block in content:
+            if block.type == "text":
+                print(f"\n{block.text}")
 
-        Args:
-            working_dir: 当前工作目录
-        """
-        self.working_dir = working_dir
-        self.platform = "linux"
-        self.git_branch = "main"
-        self.rules: list[str] = []
-        self.extra_sections: dict[str, str] = {}
 
-    def set_platform(self, platform: str) -> "SystemPromptBuilder":
-        """设置平台信息（支持链式调用）。"""
-        self.platform = platform
-        return self
+def agent_loop(messages: list) -> None:
+    """
+    Agent 循环的核心实现。
 
-    def set_git_branch(self, branch: str) -> "SystemPromptBuilder":
-        """设置 git 分支（支持链式调用）。"""
-        self.git_branch = branch
-        return self
+    流程：
+      1. 将消息历史发送给模型（连同工具定义）
+      2. 模型返回回复，检查 stop_reason
+      3. 如果是 "end_turn" -- 对话结束，退出循环
+      4. 如果包含 tool_use 块 -- 执行工具，将结果追加到消息中，继续循环
+      5. 重复步骤 1
 
-    def add_rule(self, rule: str) -> "SystemPromptBuilder":
-        """
-        添加一条规则。
-
-        规则通常从 CLAUDE.md 或 rules/ 目录加载。
-        它们定义了 Agent 在此项目中应该遵循的约束。
-
-        Args:
-            rule: 规则文本
-
-        Returns:
-            self（支持链式调用）
-        """
-        self.rules.append(rule)
-        return self
-
-    def add_rules(self, rules: list[str]) -> "SystemPromptBuilder":
-        """批量添加规则。"""
-        self.rules.extend(rules)
-        return self
-
-    def add_section(self, title: str, content: str) -> "SystemPromptBuilder":
-        """
-        添加一个额外的 section。
-
-        用于注入动态信息，如当前日期、git 状态等。
-
-        Args:
-            title:   section 标题
-            content: section 内容
-
-        Returns:
-            self（支持链式调用）
-        """
-        self.extra_sections[title] = content
-        return self
-
-    def build(self) -> str:
-        """
-        构建完整的 system prompt。
-
-        Returns:
-            str: 完整的 system prompt 文本
-        """
-        return build_system_prompt(
-            working_dir=self.working_dir,
-            platform=self.platform,
-            git_branch=self.git_branch,
-            rules=self.rules,
-            extra_sections=self.extra_sections,
+    关键 API 字段说明：
+      - response.stop_reason: "end_turn"（模型说完）或 "tool_use"（请求执行工具）
+      - response.content: 内容块列表（text 和/或 tool_use）
+      - tool_use.id: 每个工具调用的唯一 ID，tool_result 必须用这个 ID 来匹配
+    """
+    system = get_system_prompt(context)
+    while True:
+        # 调用模型 API
+        # tools 参数传入工具定义列表，模型就知道它有哪些能力可用
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=8096,
+            system=system,
+            tools=TOOLS,
+            messages=messages,
         )
 
+        # 将助手回复追加到消息历史
+        # 注意：content 是 block 列表，不是字符串
+        messages.append({"role": "assistant", "content": response.content})
 
-# ════════════════════════════════════════════════════════════
-# 第四部分：规则加载示例
-# ════════════════════════════════════════════════════════════
+        # 关键判断：模型是否要结束对话？
+        if response.stop_reason == "end_turn":
+            break
 
-def load_rules_example() -> list[str]:
-    """
-    模拟 Claude Code 加载规则的过程。
+        # 如果 stop_reason 包含 tool_use，处理工具调用
+        # 一个回复中可能包含多个 tool_use 块，需要逐个处理
+        tool_results = []
+        for block in response.content:
+            if block.type == "tool_use":
+                print(f"\n[执行工具] {block.name}...")
 
-    Claude Code 从以下位置加载规则（按优先级）：
-      1. 项目根目录的 CLAUDE.md
-         - 项目特定的规则和约定
-         - 例如：编码风格、分支策略
+                handler = TOOL_HANDLERS.get(block.name)
+                output = handler(**block.input) if handler else f"Unknown: {block.name}"
 
-      2. 项目子目录的 CLAUDE.md
-         - 子目录特定的规则
-         - 例如：frontend/ 目录有自己的规则
+                print(f"[工具输出]\n{output}")
 
-      3. ~/.claude/CLAUDE.md（全局规则）
-         - 用户级别的偏好
-         - 对所有项目生效
+                # 构建 tool_result
+                # tool_use_id 必须与 tool_use 的 id 匹配，这是 API 的要求
+                # content 是工具执行的输出文本
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": output,
+                })
 
-      4. ~/.claude/rules/ 中的规则文件
-         - 按语言和领域组织的规则
-         - 例如：rules/python/coding-style.md
-
-    规则的优先级：子目录 > 项目根目录 > 全局
-
-    Returns:
-        list[str]: 模拟加载的规则列表
-    """
-    rules = []
-
-    # 模拟从项目 CLAUDE.md 加载
-    rules.append("遵循 PEP 8 编码规范")
-    rules.append("测试覆盖率不低于 80%")
-    rules.append("不要在代码中硬编码密钥")
-
-    # 模拟从 rules/common/ 加载
-    rules.append("优先使用不可变数据结构")
-    rules.append("函数不超过 50 行")
-    rules.append("文件不超过 800 行")
-
-    # 模拟从 rules/python/ 加载
-    rules.append("使用 type annotations")
-    rules.append("使用 black 格式化代码")
-    rules.append("使用 pytest 编写测试")
-
-    return rules
+        # 将工具结果作为 user 消息追加到历史
+        # 下一轮循环时，模型会看到这些工具结果并决定下一步
+        messages.append({"role": "user", "content": tool_results})
+        # 更新上下文，重新组装系统提示词
+        context = update_context(context, messages)
+        system = get_system_prompt(context)
 
 
-# ════════════════════════════════════════════════════════════
-# 第五部分：Agent 调用（使用构建的 system prompt）
-# ════════════════════════════════════════════════════════════
-
-def run_agent(query: str, system_prompt: str) -> str:
-    """
-    使用构建好的 system prompt 运行 Agent。
-
-    Args:
-        query:         用户输入
-        system_prompt: 系统提示词
-
-    Returns:
-        str: Agent 的回答
-    """
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": query}],
-    )
-
-    result = ""
-    for block in response.content:
-        if hasattr(block, "text"):
-            result += block.text
-    return result
-
-
-# ════════════════════════════════════════════════════════════
-# 第六部分：程序入口
-# ════════════════════════════════════════════════════════════
-
+# ============================================================
+# 程序入口
+# ============================================================
 if __name__ == "__main__":
-    print("=" * 60)
-    print("  U08 - System Prompt（系统提示词）构建演示")
-    print("=" * 60)
+    """
+    条件判断：if __name__ == "__main__": 检查当前模块是否作为主程序运行
+    程序入口：只有当文件直接执行时，条件才为真，代码块内的内容才会执行
+    模块导入保护：当文件被其他模块导入时，条件为假，代码块内的内容不会执行
 
-    # ── 演示 1：使用构建器创建 system prompt ──
-    print("\n── 演示 1：使用 SystemPromptBuilder 构建 ──\n")
+    __name__ 是Python的一个内置变量：
+    当文件直接运行时，__name__ 的值为 "__main__"
+    当文件被导入时，__name__ 的值为模块名（如 "u01_agent_loop"）
+    """
 
-    builder = SystemPromptBuilder(working_dir="/home/user/my-project")
+    print("输入问题，回车发送。输入 q 退出。")
 
-    # 设置环境信息
-    builder.set_platform("linux").set_git_branch("feature/auth")
-
-    # 添加规则（模拟从 CLAUDE.md 加载）
-    for rule in load_rules_example():
-        builder.add_rule(rule)
-
-    # 添加动态 section
-    today = datetime.now().strftime("%Y-%m-%d")
-    builder.add_section("Current Date", f"Today's date is {today}.")
-    builder.add_section("Git Status", "Current branch: feature/auth\n3 files changed, 120 insertions(+), 15 deletions(-)")
-
-    # 构建并输出
-    prompt = builder.build()
-    print("生成的 System Prompt：")
-    print("=" * 60)
-    print(prompt)
-    print("=" * 60)
-    print(f"\nPrompt 长度: {len(prompt)} 字符")
-
-    # ── 演示 2：链式调用 ──
-    print("\n\n── 演示 2：链式调用构建 ──\n")
-
-    prompt2 = (
-        SystemPromptBuilder("/home/user/api-server")
-        .set_platform("darwin")
-        .set_git_branch("main")
-        .add_rule("使用 FastAPI 框架")
-        .add_rule("所有接口必须有 OpenAPI 文档")
-        .add_section("Current Date", f"Today's date is {today}.")
-        .build()
-    )
-    print("链式调用构建的 prompt：")
-    print("-" * 50)
-    print(prompt2)
-    print("-" * 50)
-
-    # ── 演示 3：对比不同配置 ──
-    print("\n\n── 演示 3：不同项目配置的对比 ──\n")
-
-    # Python 项目
-    python_prompt = (
-        SystemPromptBuilder("/home/user/python-api")
-        .add_rule("使用 Python 3.12+")
-        .add_rule("使用 type annotations")
-        .add_rule("使用 pytest 编写测试")
-        .build()
-    )
-
-    # Web 前端项目
-    web_prompt = (
-        SystemPromptBuilder("/home/user/react-app")
-        .add_rule("使用 TypeScript")
-        .add_rule("使用 React 18+")
-        .add_rule("使用 Vitest 编写测试")
-        .add_rule("CSS 使用 Tailwind CSS")
-        .build()
-    )
-
-    print(f"Python 项目 prompt: {len(python_prompt)} 字符")
-    print(f"Web 前端项目 prompt: {len(web_prompt)} 字符")
-    print("\n两个项目的 system prompt 结构相同，但规则不同，")
-    print("这使得 Agent 能够适应不同的项目环境。")
-
-    # ── 演示 4：prompt 的层次结构 ──
-    print("\n\n── 演示 4：System Prompt 的层次结构 ──\n")
-    print("""
-    System Prompt 的组装过程：
-
-    ┌─────────────────────────────────────┐
-    │  Section 1: 角色定义                 │  ← 基础层：你是谁
-    │  "You are an interactive agent..."  │
-    ├─────────────────────────────────────┤
-    │  Section 2: 工具指南                 │  ← 能力层：能做什么
-    │  "Use dedicated tools..."           │
-    ├─────────────────────────────────────┤
-    │  Section 3: 行为规范                 │  ← 行为层：怎么做
-    │  "Be concise and direct..."         │
-    ├─────────────────────────────────────┤
-    │  Section 4: 安全规则                 │  ← 约束层：不能做什么
-    │  "Never expose secrets..."          │
-    ├─────────────────────────────────────┤
-    │  Section 5: 项目规则                 │  ← 项目层：项目特定约束
-    │  "- 测试覆盖率 >= 80%"              │
-    │  "- 使用 type annotations"          │
-    ├─────────────────────────────────────┤
-    │  Section 6: 动态信息                 │  ← 上下文层：当前状态
-    │  "Current Date: 2026-07-31"         │
-    │  "Git branch: feature/auth"         │
-    └─────────────────────────────────────┘
-
-    每一层都为 Agent 的行为提供了指导和约束。
-    这种分层设计使得 system prompt 既有通用性，又有灵活性。
-    """)
-
-    # ── 交互模式 ──
-    print("=" * 60)
-    print("  交互模式")
-    print("  输入问题，使用构建好的 system prompt 运行 Agent")
-    print("  输入 q 退出")
-    print("=" * 60 + "\n")
-
-    # 使用第一个演示构建的 prompt
+    # 消息历史贯穿整个会话，模型能看到之前所有对话
+    history = []
+    context = update_context({}, [])
     while True:
         try:
-            query = input("\033[36mu08 >> \033[0m")
+            # 用户输入
+            user_input = input("\033[36ms01 >> \033[0m").strip()
+            if user_input.lower() in ("q", "exit", "quit", ""): break
+            # 输入追加到消息历史
+            history.append({"role": "user", "content": user_input})
         except (EOFError, KeyboardInterrupt):
-            break
+            break  # Ctrl+D 退出, Ctrl+C 退出
 
-        if query.strip().lower() in ("q", "quit", "exit"):
-            print("bye!")
-            break
+        # Agent Loop = 智能体的 “思考 — 行动 — 观察” 循环
+        # 是大模型 Agent（智能体）最核心的工作机制
+        # 让 AI 能像人一样自主解决复杂任务，而不是只做一次性问答
+        agent_loop(history, context)
 
-        try:
-            response = run_agent(query, prompt)
-            print(response)
-        except Exception as e:
-            print(f"Error: {e}")
+        context = update_context(context, history)
         print()
+        print("-" * 100)
+        print_response_content(history[-1]['content'])
