@@ -8,13 +8,24 @@
 """
 
 
+import httpx
 import pytest
 from langgraph_sdk import get_client
 
 
+def _server_running() -> bool:
+    """检查 LangGraph Server 是否在 localhost:2024 运行。"""
+    try:
+        resp = httpx.get("http://localhost:2024/ok", timeout=2)
+        return resp.status_code == 200
+    except (httpx.ConnectError, httpx.TimeoutException):
+        return False
+
+
+@pytest.mark.anyio
 @pytest.mark.langsmith
 @pytest.mark.skipif(
-    True,  # 默认跳过，因为需要运行 langgraph dev
+    not _server_running(),
     reason="需要 LangGraph Server 运行在 localhost:2024，请先执行 langgraph dev",
 )
 async def test_sdk_stream() -> None:

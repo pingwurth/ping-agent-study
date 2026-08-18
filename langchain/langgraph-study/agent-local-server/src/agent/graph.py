@@ -26,7 +26,6 @@
 
 from __future__ import annotations
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 
@@ -64,8 +63,8 @@ def build_graph() -> StateGraph:
     - retry_on: 指定哪些异常触发重试
 
     关于 Checkpointer：
-    - MemorySaver 将状态保存在内存中
-    - 生产环境应使用数据库后端（PostgresSaver, SqliteSaver 等）
+    - langgraph dev 环境会自动提供 checkpointer（无需手动配置）
+    - 生产环境通过 LangSmith Deployment 自动管理持久化
     - checkpointer 是 interrupt()（人工审核）工作的前提条件
     """
     # --- 步骤 1：创建 StateGraph ---
@@ -137,16 +136,11 @@ def build_graph() -> StateGraph:
 # 编译图并导出
 # ============================================================================
 
-# MemorySaver 是内存中的 checkpointer
-# - 使 interrupt() 能够暂停和恢复执行
-# - 保存每个步骤的状态快照
-# - 生产环境应替换为持久化存储（如 PostgresSaver）
-memory = MemorySaver()
-
 # 构建图
 workflow = build_graph()
 
 # 编译图
-# - checkpointer=memory: 启用状态持久化（interrupt() 必需）
+# - langgraph dev 会自动提供 checkpointer（持久化由平台管理）
+# - interrupt() 依赖 checkpointer，但 langgraph dev 环境会自动注入
 # - 编译后的图是一个 Pregel 对象，可以调用 invoke/stream/stream_events
-graph = workflow.compile(checkpointer=memory)
+graph = workflow.compile()
